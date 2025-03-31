@@ -16,7 +16,7 @@ It auto-detects the current folder and builds your workspace — even without an
 - **Smart Defaults**: Works out-of-the-box without config
 - **Dynamic Session Naming**: Based on full folder path
 - **Initial Focus Control**: Specify which pane to focus on startup
-- **CLI Flags**: Built-in `--version`, `--update`, `--help`, `--list`
+- **CLI Flags**: Built-in `--version`, `--update`, `--help`, `--list`, `--file`
 - **Shell-Independent**: Works on macOS, Linux, WSL
 - **Example Library**: Ready-to-use layout templates for various workflows
 
@@ -58,6 +58,12 @@ tmuxify
 ### With Config (`.tmuxify.yml`):
 Custom layout and commands are loaded.
 
+### With Custom Layout File:
+```sh
+tmuxify --file path/to/custom-layout.yml
+```
+This overrides the default `.tmuxify.yml` configuration.
+
 ### Without Config:
 A default layout is used automatically.
 
@@ -73,6 +79,17 @@ tmuxify --version    # Show version
 tmuxify --update     # Download and install the latest version
 tmuxify --help       # Show usage instructions
 tmuxify --list       # List all active tmux sessions
+tmuxify --file FILE  # Use a specific layout file
+```
+
+You can also use the short-form flags:
+
+```sh
+tmuxify -v           # Show version
+tmuxify -u           # Update tmuxify
+tmuxify -h           # Show help
+tmuxify -l           # List tmux sessions
+tmuxify -f FILE      # Use a specific layout file
 ```
 
 ---
@@ -141,8 +158,8 @@ To use an example layout:
 # Copy to your project
 cp examples/layouts/basic-2-pane.yml ./.tmuxify.yml
 
-# Run tmuxify
-tmuxify
+# Or use directly without copying
+tmuxify --file examples/layouts/basic-2-pane.yml
 ```
 
 ---

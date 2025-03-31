@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.2.0] – 2025-03-31
+
+### Added
+- Custom layout file support with `--file/-f` flag
+- Improved argument handling with more robust validation
+
 ## [2.1.0] – 2025-03-31
 
 ### Added
