@@ -9,13 +9,14 @@ It auto-detects the current folder and builds your workspace — even without an
 
 ## 🚀 Features
 
+- **Smart Session Management**: Auto-detects and attaches to existing sessions
 - **Fully Modular Layout System**: Create any pane arrangement with a simple tree structure
 - **Dynamic Sizing**: Flexible percentage-based sizing for all panes
 - **Unlimited Panes**: No restrictions on layout complexity or number of panes
 - **Smart Defaults**: Works out-of-the-box without config
 - **Dynamic Session Naming**: Based on full folder path
 - **Initial Focus Control**: Specify which pane to focus on startup
-- **CLI Flags**: Built-in `--version`, `--update`, `--help`
+- **CLI Flags**: Built-in `--version`, `--update`, `--help`, `--list`
 - **Shell-Independent**: Works on macOS, Linux, WSL
 - **Example Library**: Ready-to-use layout templates for various workflows
 
@@ -52,6 +53,9 @@ Custom layout and commands are loaded.
 ### Without Config:
 A default layout is used automatically.
 
+### Session Management:
+If a tmux session already exists for your current directory, Tmuxify will automatically attach to it instead of creating a new one.
+
 ---
 
 ## 🧰 Command-line Flags
@@ -60,6 +64,7 @@ A default layout is used automatically.
 tmuxify --version    # Show version
 tmuxify --update     # Download and install the latest version
 tmuxify --help       # Show usage instructions
+tmuxify --list       # List all active tmux sessions
 ```
 
 ---

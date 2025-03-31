@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0] – 2025-03-31
+
+### Added
+- Session detection: Automatically attaches to existing sessions with matching names
+- New `--list` flag to show all active tmux sessions
+- Improved messaging to indicate whether attaching to existing or creating new session
+
 ## [2.0.0] – 2025-03-31
 
 ### Added
