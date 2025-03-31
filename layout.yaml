@@ -1,120 +1,57 @@
-# Nested Development Environment
-# A complex multi-level nested layout for advanced development workflows
+# Financial Analysis Layout
+# Complete setup for financial data analysis
 
 session:
-  name: "nested-dev"
-  initial_focus: main_editor
+  name: "finance"
+  initial_focus: analysis
 
 layout:
-  type: vertical
+  type: horizontal
   splits:
-    # Top bar with project status tools
-    - type: horizontal
-      size: 15%
+    # Left - analysis scripts
+    - type: vertical
+      size: 40%
       splits:
-        - id: project_overview
-          size: 25%
-          command: "echo 'Project Overview' && ls -la"
-        - id: git_status
-          size: 25%
-          command: "git status"
-        - id: system_monitor
-          size: 25%
-          command: "echo 'System Resources' && uptime"
-        - id: clock
-          size: 25%
-          command: "watch -n 1 date"
+        - id: analysis
+          size: 70%
+          command: "nvim analysis.py"
+        - id: terminal
+          size: 30%
+          command: "python3"
     
-    # Main development area
-    - type: horizontal
-      size: 70%
+    # Right - market data and news
+    - type: vertical
+      size: 60%
       splits:
-        # Left editor column
-        - type: vertical
+        - type: horizontal
           size: 60%
           splits:
-            - id: main_editor
-              size: 70%
-              command: "nvim ."
-            - id: terminal
-              size: 30%
-              command: "clear && echo 'Ready for commands'"
-        
-        # Right side tools
-        - type: vertical
+            - id: market_data
+              size: 50%
+              command: "echo 'Market Data Dashboard'"
+            - id: portfolio
+              size: 50%
+              command: "echo 'Portfolio Tracker'"
+        - type: horizontal
           size: 40%
           splits:
-            # Top-right documentation
-            - id: docs
-              size: 30%
-              command: "echo 'Documentation Area'"
-            
-            # Middle-right testing area
-            - type: horizontal
+            - id: news
+              size: 60%
+              command: "echo 'Financial News Feed'"
+            - id: notes
               size: 40%
-              splits:
-                - id: test_runner
-                  size: 50%
-                  command: "echo 'Test Runner Ready'"
-                - type: vertical
-                  size: 50%
-                  splits:
-                    - id: test_output
-                      size: 50%
-                      command: "echo 'Test Output'"
-                    - id: coverage
-                      size: 50%
-                      command: "echo 'Test Coverage'"
-            
-            # Bottom-right logs and debugging
-            - type: horizontal
-              size: 30%
-              splits:
-                - id: logs
-                  size: 50%
-                  command: "echo 'Application Logs'"
-                - id: debug
-                  size: 50%
-                  command: "echo 'Debug Console'"
-    
-    # Bottom bar with command tools
-    - type: horizontal
-      size: 15%
-      splits:
-        - id: server
-          size: 33%
-          command: "echo 'Server: Ready to start'"
-        - id: database
-          size: 33%
-          command: "echo 'Database CLI'"
-        - id: tasks
-          size: 34%
-          command: "echo 'Task Runner'"
+              command: "nvim trading-notes.md"
 
 # Result:
-# |-----------------------------------------------------------------------|
-# | project |    git    |   system   |            clock                   |
-# | overview|   status  |   monitor  |                                    |
-# |-----------------------------------------------------------------------|
-# |                           |                |                          |
-# |                           |                |                          |
-# |                           |                |                          |
-# |                           |     docs       |                          |
-# |                           |                |                          |
-# |                           |----------------|--------------------------|
-# |                           |                |            |             |
-# |      main_editor          | test_runner    | test_output| coverage    |
-# |                           |                |            |             |
-# |                           |                |            |             |
-# |                           |----------------|--------------------------|
-# |                           |                |                          |
-# |                           |     logs       |     debug                |
-# |---------------------------|                |                          |
-# |                           |                |                          |
-# |       terminal            |                |                          |
-# |                           |                |                          |
-# |-----------------------------------------------------------------------|
-# |                  |                  |                                 |
-# |      server      |    database      |            tasks                |
-# |                  |                  |                                 |
-# |-----------------------------------------------------------------------|
+# |--------------------------------------------------|
+# |                     |              |             |
+# |                     |              |             |
+# |                     |   Market     | Portfolio   |
+# |     Analysis        |    Data      |  Tracker    |
+# |     Scripts         |              |             |
+# |                     |--------------------------------
+# |                     |              |             |
+# |---------------------|    News      |   Notes     |
+# |     Terminal        |    Feed      |             |
+# |                     |              |             |
+# |--------------------------------------------------|

@@ -1,185 +1,156 @@
 # Tmuxify
 
-**Instantly launch fully customized `tmux` workspaces.**
+**Instantly launch customized `tmux` workspaces using simple YAML configuration.**
 
-Tmuxify creates dynamic, modular, and highly customizable tmux sessions configured through YAML.  
-It auto-detects the current folder and builds your workspace — even without any config file.
-
----
-
-## 🚀 Features
-
-- **Smart Session Management**: Auto-detects and attaches to existing sessions
-- **Fully Modular Layout System**: Create any pane arrangement with a simple tree structure
-- **Dynamic Sizing**: Flexible percentage-based sizing for all panes
-- **Unlimited Panes**: No restrictions on layout complexity or number of panes
-- **Smart Defaults**: Works out-of-the-box without config
-- **Dynamic Session Naming**: Based on full folder path
-- **Initial Focus Control**: Specify which pane to focus on startup
-- **CLI Flags**: Built-in `--version`, `--update`, `--help`, `--list`, `--file`
-- **Shell-Independent**: Works on macOS, Linux, WSL
-- **Example Library**: Ready-to-use layout templates for various workflows
+Tmuxify automates the creation and management of `tmux` sessions, allowing you to define complex layouts and commands declaratively. It automatically detects project contexts and can run with or without a dedicated configuration file.
 
 ---
 
-## 📦 Installation
+## Features
 
-### Prerequisites
+*   **Declarative Layouts:** Define complex, nested pane structures using an intuitive YAML format.
+*   **Session Management:** Automatically generates session names or uses custom ones; attaches to existing sessions seamlessly.
+*   **Flexible Sizing:** Uses percentage-based pane dimensions that adapt to window resizing (`aggressive-resize`).
+*   **Custom Commands:** Specify initial commands to run in each pane upon creation.
+*   **Zero Config Option:** Provides a sensible default layout if no configuration file is found.
+*   **Configuration Override:** Specify layout files directly via command-line flag.
+*   **Self-Updating:** Includes a built-in command to fetch the latest version.
+*   **Helper Utilities:** Flags for version display, help, and listing sessions.
 
-- [`tmux`](https://github.com/tmux/tmux)
-- [`yq`](https://github.com/mikefarah/yq)
+---
 
-### First time install
-#### macOS and linux
+## Installation
+
+**Prerequisites:**
+
+*   [`tmux`](https://github.com/tmux/tmux)
+*   [`yq`](https://github.com/mikefarah/yq) (v4+)
+
+**Install / Update:**
 
 ```sh
+# First time install (macOS/Linux)
 curl -fsSL https://raw.githubusercontent.com/mustafamohsen/tmuxify/main/tmuxify \
   -o /usr/local/bin/tmuxify && chmod +x /usr/local/bin/tmuxify
-```
 
-### One-liner update
-
-```sh
+# Update to the latest version
 tmuxify --update
 ```
 
-> `tmuxify` is now self-updating — no installer script required!
-
 ---
 
-## ⚙️ Usage
+## Usage
 
-From any project directory, just run:
+Navigate to your project directory and run:
 
 ```sh
 tmuxify
 ```
 
-### With Config (`.tmuxify.yml`):
-Custom layout and commands are loaded.
+**Configuration Priority:**
 
-### With Custom Layout File:
-```sh
-tmuxify --file path/to/custom-layout.yml
-```
-This overrides the default `.tmuxify.yml` configuration.
+1.  **`--file <path>`:** Uses the specified YAML file.
+    ```sh
+    tmuxify --file path/to/custom-layout.yml
+    ```
+2.  **`.tmuxify.yml`:** Uses the configuration file found in the current directory.
+3.  **Default Layout:** If neither of the above is found, creates a standard 4-pane layout.
 
-### Without Config:
-A default layout is used automatically.
-
-### Session Management:
-If a tmux session already exists for your current directory, Tmuxify will automatically attach to it instead of creating a new one.
+Tmuxify will attach to an existing `tmux` session if one matches the target session name (either specified in the config or auto-generated from the directory name).
 
 ---
 
-## 🧰 Command-line Flags
+## Command-Line Flags
 
-```sh
-tmuxify --version    # Show version
-tmuxify --update     # Download and install the latest version
-tmuxify --help       # Show usage instructions
-tmuxify --list       # List all active tmux sessions
-tmuxify --file FILE  # Use a specific layout file
-```
-
-You can also use the short-form flags:
-
-```sh
-tmuxify -v           # Show version
-tmuxify -u           # Update tmuxify
-tmuxify -h           # Show help
-tmuxify -l           # List tmux sessions
-tmuxify -f FILE      # Use a specific layout file
-```
+| Flag            | Alias | Description                                         |
+| --------------- | ----- | --------------------------------------------------- |
+| `--version`     | `-v`  | Show Tmuxify version.                               |
+| `--update`      | `-u`  | Download and install the latest version.            |
+| `--help`        | `-h`  | Display usage instructions.                         |
+| `--list`        | `-l`  | List all active tmux sessions.                      |
+| `--file FILE`   | `-f`  | Use a specific layout file (overrides `.tmuxify.yml`). |
 
 ---
 
-## 🛠 Layout System
+## Layout Configuration
 
-Tmuxify uses a tree-based layout system to define pane structures. The layout is defined by:
+Define layouts in YAML using a nested tree structure.
 
-1. **Split Type**: `horizontal` (side-by-side) or `vertical` (top/bottom)
-2. **Split Items**: Each split contains either terminal panes or nested splits
-3. **Size Control**: Define each pane's size as a percentage
-4. **Commands**: Specify what command runs in each pane
-5. **Identifiers**: Reference panes by ID for initial focus
+**Core Concepts:**
 
-### Example Layout
+*   **`session`:** Top-level key for session settings (`name`, `initial_focus`).
+*   **`layout`:** Defines the root pane split.
+    *   **`type`:** `horizontal` (side-by-side) or `vertical` (top/bottom).
+    *   **`splits`:** An array of items within the current layout block.
+        *   **Pane:** An object defining a terminal pane (`id`, `size`, `command`).
+        *   **Nested Layout:** An object defining further splits (`type`, `size`, `splits`).
+*   **`id`:** An optional unique identifier for a pane (used for `initial_focus`).
+*   **`size`:** Percentage of the available space for the pane/split (e.g., `60%`). The last item in a `splits` array takes the remaining space.
+*   **`command`:** The shell command to execute in the pane upon creation.
+
+**Example (`.tmuxify.yml`):**
 
 ```yaml
 session:
-  name: null  # Auto-generate from folder
-  initial_focus: editor  # Focus this pane when starting
+  name: my-project # Optional: Uses directory name if null/omitted
+  initial_focus: editor # Optional: Focus pane with id 'editor' on start
 
 layout:
-  type: horizontal  # First split horizontally
+  type: horizontal
   splits:
     - id: editor
       size: 60%
       command: "nvim ."
     - type: vertical
-      size: 40%
+      size: 40% # Takes 40% of the remaining horizontal space
       splits:
-        - id: assistant
-          size: 70%
-          command: "aider"
-        - id: terminal
-          size: 30%
+        - id: tests
+          size: 50% # Takes 50% of the vertical space in this section
+          command: "make test-watch"
+        - id: console
+          # size omitted: takes remaining 50% vertical space
           command: "clear"
 ```
 
 This creates:
-```
-|--------------------------------------|
-|                    |                 |
-|                    |   assistant     |
-|      editor        |                 |
-|                    |-----------------|
-|                    |   terminal      |
-|--------------------------------------|
-```
 
-You can nest splits arbitrarily deep to create complex layouts.
+```
+|--------------------------------------|
+|                    |      tests      |
+|                    |-----------------|
+|      editor        |     console     |
+|      (60%)         |    (40% H)      |
+|                    | (50% V | 50% V) |
+|--------------------------------------|
+```
 
 ---
 
-## 📚 Example Layouts
+## Example Layouts
 
-Check out the `examples/layouts/` directory for ready-to-use templates:
+Explore the `examples/layouts/` directory for various pre-built configurations (basic, development, monitoring).
 
-- **Basic** layouts (2-pane, 3-pane, classic 4-pane)
-- **Development** layouts (fullstack, data science, golang)
-- **Monitoring** layouts (system monitoring, log viewing)
-- **Complex** layouts (grid patterns, asymmetric arrangements)
-
-To use an example layout:
+**To use an example directly:**
 
 ```bash
-# Copy to your project
-cp examples/layouts/basic-2-pane.yml ./.tmuxify.yml
-
-# Or use directly without copying
-tmuxify --file examples/layouts/basic-2-pane.yml
+tmuxify --file examples/layouts/golang-dev.yml
 ```
 
 ---
 
-## 🧩 Backward Compatibility
+## Backward Compatibility
 
-For users of version 1.x, Tmuxify will automatically handle the old layout format with a compatibility mode, maintaining the classic 4-pane layout.
-
----
-
-## 📚 Contribute
-
-PRs and suggestions are welcome!
-
-- File issues for bugs or feature requests
-- Open a PR to add a layout mode, plugin, or integration
-- Share your custom layout configurations
+Tmuxify v2+ automatically handles the legacy layout format of v1.x, applying the classic 4-pane structure for projects without a `.tmuxify.yml` file.
 
 ---
 
-## 📃 License
+## Contributing
 
-MIT License
+Contributions, issues, and feature requests are welcome. Feel free to open a pull request or submit an issue on the project repository.
+
+---
+
+## License
+
+[MIT License](LICENSE) # Assuming you have a LICENSE file, otherwise remove link
+
