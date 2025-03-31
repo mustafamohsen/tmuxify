@@ -1,19 +1,41 @@
 #!/usr/bin/env sh
 
+VERSION="1.0.0"
+REPO_URL="https://raw.githubusercontent.com/mustafamohsen/tmuxify/main/tmuxify"
+
+# Handle CLI arguments
+case "$1" in
+  --version|-v)
+    echo "tmuxify version $VERSION"
+    exit 0
+    ;;
+  --help|-h)
+    echo "Usage: tmuxify [--version|-v] [--update|-u] [--help|-h]"
+    echo
+    echo "  --version, -v   Show version"
+    echo "  --update, -u    Download latest version"
+    echo "  --help, -h      Show help"
+    exit 0
+    ;;
+  --update|-u)
+    echo "Updating tmuxify..."
+    curl -fsSL "$REPO_URL" -o /usr/local/bin/tmuxify && chmod +x /usr/local/bin/tmuxify
+    echo "✅ tmuxify updated successfully"
+    exit 0
+    ;;
+esac
+
+# Core logic starts here
 command -v yq >/dev/null || { echo "yq required: https://github.com/mikefarah/yq"; exit 1; }
 command -v tmux >/dev/null || { echo "tmux required: https://github.com/tmux/tmux"; exit 1; }
 
 WORKDIR=$(pwd)
-
-# Generate unique session name from full path
 SESSION=$(echo "$WORKDIR" | sed 's/[\/\.]/_/g' | sed 's/^_//')
 
-# Attach if session already exists
 tmux has-session -t "$SESSION" 2>/dev/null && exec tmux attach -t "$SESSION"
 
 CONFIG_FILE="$WORKDIR/.tmuxify.yml"
 
-# Load from YAML if available, otherwise use built-in defaults
 if [ ! -f "$CONFIG_FILE" ]; then
   left_width=50
   right_top_height=50
@@ -34,31 +56,21 @@ else
   rmicro_cmd=$(yq -r '.panes.rmicro.command' "$CONFIG_FILE")
 fi
 
-# Primary pane (left)
 tmux new-session -d -s "$SESSION" -c "$WORKDIR" "$primary_cmd"
-
-# Right pane
 tmux split-window -h -t "$SESSION":0.0 -c "$WORKDIR"
 tmux resize-pane -t "$SESSION":0.0 -x "$(($(tmux display -p '#{window_width}') * left_width / 100))"
 
-# Top right: secondary
 tmux split-window -v -t "$SESSION":0.1 -c "$WORKDIR"
 tmux resize-pane -t "$SESSION":0.1 -y "$(($(tmux display -p '#{window_height}') * right_top_height / 100))"
 tmux send-keys -t "$SESSION":0.1 "$secondary_cmd" C-m
 
-# Bottom right: split horizontally
 tmux split-window -h -t "$SESSION":0.2 -c "$WORKDIR"
-
-# Resize lmicro (left side of bottom-right split)
 bottom_right_width=$(tmux display -p -t "$SESSION":0.2 '#{pane_width}')
 lmicro_width=$((bottom_right_width * right_bottom_left_width / 100))
 tmux resize-pane -t "$SESSION":0.2 -x "$lmicro_width"
 
-# Launch commands in bottom-right panes
 tmux send-keys -t "$SESSION":0.2 "$lmicro_cmd" C-m
 tmux send-keys -t "$SESSION":0.3 "$rmicro_cmd" C-m
 
-# Focus on primary pane
 tmux select-pane -t "$SESSION":0.0
-
 exec tmux attach -t "$SESSION"
