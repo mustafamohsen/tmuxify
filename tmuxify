@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 
-VERSION="1.0.0"
+VERSION=$(cat "$(dirname "$0")/VERSION" 2>/dev/null || echo "unknown")
 REPO_URL="https://raw.githubusercontent.com/mustafamohsen/tmuxify/main/tmuxify"
 
 # Handle CLI arguments
