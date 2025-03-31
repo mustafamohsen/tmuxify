@@ -5,8 +5,6 @@
 Tmuxify creates dynamic, modular, and highly customizable tmux sessions configured through YAML.  
 It auto-detects the current folder and builds your workspace even if no configuration is present.
 
-This is an early stage project. Please report any bugs and suggested features
-
 ---
 
 ## 🚀 Features
@@ -52,8 +50,6 @@ Tmuxify uses the **built-in default layout**.
 
 ## 🛠 Default Layout (No YAML Required)
 
-If no `.tmuxify.yml` file is present in the directory, this layout is used:
-
 ```yaml
 session:
   name: null
@@ -69,9 +65,9 @@ panes:
     command: "nvim ."
   secondary:
     command: "aider"
-  rmicro:
-    command: "lazygit"
   lmicro:
+    command: "lazygit"
+  rmicro:
     command: "clear"
 ```
 
@@ -81,15 +77,15 @@ panes:
 |------------------------------------------------|
 |                   |         secondary          |
 |                   |----------------------------|
-|      primary      |   rmicro      |   lmicro   |
+|      primary      |   lmicro      |   rmicro   |
 |                   |               |            |
 |------------------------------------------------|
 ```
 
 - `primary`: Code editor (left half)
 - `secondary`: AI assistant (top right)
-- `rmicro`: Git or other tool (bottom right-left)
-- `lmicro`: Shell or logs (bottom right-right)
+- `lmicro`: Git or log viewer (bottom right-left)
+- `rmicro`: Shell or micro-tool (bottom right-right)
 
 ---
 

@@ -12,7 +12,7 @@ panes:
     command: "nvim ."
   secondary:
     command: "aider"
-  rmicro:
-    command: "lazygit"
   lmicro:
+    command: "lazygit"
+  rmicro:
     command: "clear"
