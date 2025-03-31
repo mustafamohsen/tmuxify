@@ -1,0 +1,41 @@
+# Golang Development Layout
+# Editor, terminal, test runner, and docs
+
+session:
+  name: "golang"
+  initial_focus: editor
+
+layout:
+  type: horizontal
+  splits:
+    - type: vertical
+      size: 75%
+      splits:
+        - id: editor
+          size: 70%
+          command: "nvim ."
+        - id: terminal
+          size: 30%
+          command: "clear && go version"
+    - type: vertical
+      size: 25%
+      splits:
+        - id: tests
+          size: 50%
+          command: "echo 'Ready to run: go test ./...'"
+        - id: docs
+          size: 50%
+          command: "echo 'Go docs ready'"
+
+# Result:
+# |--------------------------------------------|
+# |                            |               |
+# |                            |               |
+# |           editor           |    tests      |
+# |                            |               |
+# |                            |               |
+# |-----------------------------|--------------|
+# |                            |               |
+# |          terminal          |     docs      |
+# |                            |               |
+# |--------------------------------------------|

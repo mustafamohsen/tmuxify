@@ -1,0 +1,39 @@
+# Fullstack Development Layout
+# Three columns: Backend, Frontend, and Terminal/Server logs
+
+session:
+  name: "fullstack"
+  initial_focus: backend
+
+layout:
+  type: horizontal
+  splits:
+    - id: backend
+      size: 33%
+      command: "cd backend && nvim ."
+    - id: frontend
+      size: 33%
+      command: "cd frontend && nvim ."
+    - type: vertical
+      size: 34%
+      splits:
+        - id: terminal
+          size: 30%
+          command: "clear"
+        - id: backend_server
+          size: 35%
+          command: "cd backend && echo 'Ready to start backend server'"
+        - id: frontend_server
+          size: 35%
+          command: "cd frontend && echo 'Ready to start frontend server'"
+
+# Result:
+# |--------------------------------------------------|
+# |               |                |                  |
+# |               |                |    terminal      |
+# |               |                |------------------|
+# |    backend    |    frontend    |  backend_server  |
+# |               |                |------------------|
+# |               |                | frontend_server  |
+# |               |                |                  |
+# |--------------------------------------------------|

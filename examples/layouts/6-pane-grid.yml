@@ -1,0 +1,45 @@
+# 6-Pane Grid Layout
+# A 2x3 grid layout for various tools
+
+session:
+  name: "grid"
+  initial_focus: pane1
+
+layout:
+  type: vertical
+  splits:
+    - type: horizontal  # Top row
+      size: 50%
+      splits:
+        - id: pane1
+          size: 33%
+          command: "clear && echo 'Pane 1'"
+        - id: pane2
+          size: 33%
+          command: "clear && echo 'Pane 2'"
+        - id: pane3
+          size: 34%
+          command: "clear && echo 'Pane 3'"
+    - type: horizontal  # Bottom row
+      size: 50%
+      splits:
+        - id: pane4
+          size: 33%
+          command: "clear && echo 'Pane 4'"
+        - id: pane5
+          size: 33%
+          command: "clear && echo 'Pane 5'"
+        - id: pane6
+          size: 34%
+          command: "clear && echo 'Pane 6'"
+
+# Result:
+# |-----------------------------------------------|
+# |             |             |                   |
+# |    pane1    |    pane2    |      pane3       |
+# |             |             |                   |
+# |-----------------------------------------------|
+# |             |             |                   |
+# |    pane4    |    pane5    |      pane6       |
+# |             |             |                   |
+# |-----------------------------------------------|

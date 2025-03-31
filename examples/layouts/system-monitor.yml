@@ -1,0 +1,43 @@
+# System Monitoring Layout
+# Comprehensive system monitoring dashboard
+
+session:
+  name: "monitor"
+  initial_focus: system
+
+layout:
+  type: vertical
+  splits:
+    - type: horizontal
+      size: 50%
+      splits:
+        - id: system
+          size: 50%
+          command: "htop"
+        - id: network
+          size: 50%
+          command: "echo 'Network stats will appear here'"
+    - type: horizontal
+      size: 50%
+      splits:
+        - id: disk
+          size: 33%
+          command: "df -h"
+        - id: memory
+          size: 33%
+          command: "watch -n 2 free -m"
+        - id: logs
+          size: 34%
+          command: "echo 'System logs will appear here'"
+
+# Result:
+# |-----------------------------------------------|
+# |                      |                        |
+# |       system         |        network         |
+# |       (htop)         |                        |
+# |                      |                        |
+# |-----------------------------------------------|
+# |           |             |                     |
+# |   disk    |   memory    |        logs         |
+# |           |             |                     |
+# |-----------------------------------------------|

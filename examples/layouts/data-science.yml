@@ -1,0 +1,48 @@
+# Data Science Layout
+# Jupyter notebook, Python REPL, terminal, and data explorer
+
+session:
+  name: "data"
+  initial_focus: jupyter
+
+layout:
+  type: vertical
+  splits:
+    - type: horizontal
+      size: 70%
+      splits:
+        - id: jupyter
+          size: 70%
+          command: "echo 'Starting Jupyter...' && sleep 1 && echo 'Ready to launch jupyter lab'"
+        - type: vertical
+          size: 30%
+          splits:
+            - id: python_repl
+              size: 50%
+              command: "python3"
+            - id: data_browser
+              size: 50%
+              command: "ls -la data/"
+    - type: horizontal
+      size: 30%
+      splits:
+        - id: terminal
+          size: 50%
+          command: "clear"
+        - id: monitor
+          size: 50%
+          command: "htop"
+
+# Result:
+# |----------------------------------------------|
+# |                       |                      |
+# |                       |                      |
+# |      jupyter          |   python_repl        |
+# |      notebook         |----------------------|
+# |                       |   data_browser       |
+# |                       |                      |
+# |----------------------------------------------|
+# |                       |                      |
+# |      terminal         |      monitor         |
+# |                       |                      |
+# |----------------------------------------------|

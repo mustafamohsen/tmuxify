@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.0.0] – 2025-03-31
+
+### Added
+- Complete redesign of layout system with tree-based structure
+- Support for unlimited panes with arbitrary nesting
+- Initial pane focus control via `initial_focus` property
+- Extensive layout examples library with various templates
+- Detailed documentation and examples for the new layout system
+
+### Changed
+- Layout specification now uses a recursive tree structure
+- Updated `.tmuxify.yml.example` with new format
+- Improved README with comprehensive layout examples
+
+### Fixed
+- Backward compatibility for projects without `.tmuxify.yml`
+
 ## [1.0.0] – 2025-03-31
 
 ### Added

@@ -1,0 +1,33 @@
+# Basic 3-Pane Layout
+# Editor with terminal and git interface
+
+session:
+  name: "dev3"
+  initial_focus: editor
+
+layout:
+  type: horizontal
+  splits:
+    - id: editor
+      size: 60%
+      command: "nvim ."
+    - type: vertical
+      size: 40%
+      splits:
+        - id: git
+          size: 40%  # 40% of right side height
+          command: "lazygit"
+        - id: terminal
+          size: 60%  # 60% of right side height
+          command: "clear && echo '✓ Ready'"
+
+# Result:
+# |---------------------------------|
+# |                 |               |
+# |                 |     git       |
+# |                 |               |
+# |     editor      |---------------|
+# |                 |               |
+# |                 |   terminal    |
+# |                 |               |
+# |---------------------------------|

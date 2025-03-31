@@ -1,0 +1,39 @@
+# Log Viewer Layout
+# Multi-log monitoring setup
+
+session:
+  name: "logs"
+  initial_focus: command
+
+layout:
+  type: vertical
+  splits:
+    - id: command
+      size: 20%
+      command: "clear && echo 'Log viewer ready'"
+    - type: horizontal
+      size: 80%
+      splits:
+        - id: app_log
+          size: 33%
+          command: "echo 'Application logs'"
+        - id: error_log
+          size: 33%
+          command: "echo 'Error logs'"
+        - id: access_log
+          size: 34%
+          command: "echo 'Access logs'"
+
+# Result:
+# |-----------------------------------------------|
+# |                                               |
+# |                   command                     |
+# |                                               |
+# |-----------------------------------------------|
+# |             |             |                   |
+# |             |             |                   |
+# |  app_log    |  error_log  |    access_log    |
+# |             |             |                   |
+# |             |             |                   |
+# |             |             |                   |
+# |-----------------------------------------------|

@@ -1,0 +1,51 @@
+# Asymmetric Layout
+# A complex asymmetric arrangement for specialized workflows
+
+session:
+  name: "complex"
+  initial_focus: main
+
+layout:
+  type: horizontal
+  splits:
+    - id: main
+      size: 40%
+      command: "nvim ."
+    - type: vertical
+      size: 35%
+      splits:
+        - id: top_middle
+          size: 30%
+          command: "clear && echo 'Top Middle'"
+        - type: horizontal
+          size: 70%
+          splits:
+            - id: middle_left
+              size: 50%
+              command: "clear && echo 'Middle Left'"
+            - id: middle_right
+              size: 50%
+              command: "clear && echo 'Middle Right'"
+    - type: vertical
+      size: 25%
+      splits:
+        - id: top_right
+          size: 70%
+          command: "clear && echo 'Top Right'"
+        - id: bottom_right
+          size: 30%
+          command: "clear && echo 'Bottom Right'"
+
+# Result:
+# |-----------------------------------------------------------|
+# |                  |                    |                    |
+# |                  |   top_middle       |                    |
+# |                  |--------------------|                    |
+# |                  |          |         |                    |
+# |       main       | middle_  | middle_ |    top_right       |
+# |                  |  left    | right   |                    |
+# |                  |          |         |                    |
+# |                  |          |         |--------------------|
+# |                  |          |         |                    |
+# |                  |          |         |   bottom_right     |
+# |-----------------------------------------------------------|

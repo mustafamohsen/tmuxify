@@ -30,47 +30,153 @@ command -v yq >/dev/null || { echo "yq required: https://github.com/mikefarah/yq
 command -v tmux >/dev/null || { echo "tmux required: https://github.com/tmux/tmux"; exit 1; }
 
 WORKDIR=$(pwd)
-SESSION=$(echo "$WORKDIR" | sed 's/[\/\.]/_/g' | sed 's/^_//')
-
-tmux has-session -t "$SESSION" 2>/dev/null && exec tmux attach -t "$SESSION"
-
 CONFIG_FILE="$WORKDIR/.tmuxify.yml"
 
-if [ ! -f "$CONFIG_FILE" ]; then
-  left_width=50
-  right_top_height=50
-  right_bottom_left_width=50
+# Generate a session name from the working directory
+auto_session_name=$(echo "$WORKDIR" | sed 's/[\/\.]/_/g' | sed 's/^_//')
 
-  primary_cmd="nvim ."
-  secondary_cmd="aider"
-  lmicro_cmd="lazygit"
-  rmicro_cmd="clear"
+# Set session name from config or use auto-generated name
+if [ -f "$CONFIG_FILE" ]; then
+  session_name=$(yq -r '.session.name' "$CONFIG_FILE")
+  # If null or empty in config, use auto-generated name
+  if [ "$session_name" = "null" ] || [ -z "$session_name" ]; then
+    session_name="$auto_session_name"
+  fi
 else
-  left_width=$(yq '.layout.left_pane_width_percent' "$CONFIG_FILE")
-  right_top_height=$(yq '.layout.right_top_height_percent' "$CONFIG_FILE")
-  right_bottom_left_width=$(yq '.layout.right_bottom_left_width_percent' "$CONFIG_FILE")
-
-  primary_cmd=$(yq -r '.panes.primary.command' "$CONFIG_FILE")
-  secondary_cmd=$(yq -r '.panes.secondary.command' "$CONFIG_FILE")
-  lmicro_cmd=$(yq -r '.panes.lmicro.command' "$CONFIG_FILE")
-  rmicro_cmd=$(yq -r '.panes.rmicro.command' "$CONFIG_FILE")
+  session_name="$auto_session_name"
 fi
 
-tmux new-session -d -s "$SESSION" -c "$WORKDIR" "$primary_cmd"
-tmux split-window -h -t "$SESSION":0.0 -c "$WORKDIR"
-tmux resize-pane -t "$SESSION":0.0 -x "$(($(tmux display -p '#{window_width}') * left_width / 100))"
+# If a session with this name already exists, attach to it
+tmux has-session -t "$session_name" 2>/dev/null && exec tmux attach -t "$session_name"
 
-tmux split-window -v -t "$SESSION":0.1 -c "$WORKDIR"
-tmux resize-pane -t "$SESSION":0.1 -y "$(($(tmux display -p '#{window_height}') * right_top_height / 100))"
-tmux send-keys -t "$SESSION":0.1 "$secondary_cmd" C-m
+# Load default layout if no config exists
+if [ ! -f "$CONFIG_FILE" ]; then
+  # Create default layout for backward compatibility
+  create_default_layout() {
+    tmux new-session -d -s "$session_name" -c "$WORKDIR" "nvim ."
+    tmux split-window -h -t "$session_name":0.0 -c "$WORKDIR"
+    tmux resize-pane -t "$session_name":0.0 -x "$(($(tmux display -p '#{window_width}') * 50 / 100))"
+    
+    tmux split-window -v -t "$session_name":0.1 -c "$WORKDIR"
+    tmux resize-pane -t "$session_name":0.1 -y "$(($(tmux display -p '#{window_height}') * 50 / 100))"
+    tmux send-keys -t "$session_name":0.1 "aider" C-m
+    
+    tmux split-window -h -t "$session_name":0.2 -c "$WORKDIR"
+    bottom_right_width=$(tmux display -p -t "$session_name":0.2 '#{pane_width}')
+    lmicro_width=$((bottom_right_width * 50 / 100))
+    tmux resize-pane -t "$session_name":0.2 -x "$lmicro_width"
+    
+    tmux send-keys -t "$session_name":0.2 "lazygit" C-m
+    tmux send-keys -t "$session_name":0.3 "clear" C-m
+    
+    tmux select-pane -t "$session_name":0.0
+  }
+  
+  create_default_layout
+  exec tmux attach -t "$session_name"
+  exit 0
+fi
 
-tmux split-window -h -t "$SESSION":0.2 -c "$WORKDIR"
-bottom_right_width=$(tmux display -p -t "$SESSION":0.2 '#{pane_width}')
-lmicro_width=$((bottom_right_width * right_bottom_left_width / 100))
-tmux resize-pane -t "$SESSION":0.2 -x "$lmicro_width"
+# Create the initial session with a temporary pane
+tmux new-session -d -s "$session_name" -c "$WORKDIR"
 
-tmux send-keys -t "$SESSION":0.2 "$lmicro_cmd" C-m
-tmux send-keys -t "$SESSION":0.3 "$rmicro_cmd" C-m
+# Function to recursively build the layout
+build_layout() {
+  local parent_id="$1"
+  local layout_path="$2"
+  local parent_index="$3"
+  local layout_type
+  local parent_path
+  
+  # Get layout type (horizontal/vertical)
+  layout_type=$(yq -r "$layout_path.type" "$CONFIG_FILE")
+  
+  # Process each split in the layout
+  count=$(yq -r "$layout_path.splits | length" "$CONFIG_FILE")
+  for i in $(seq 0 $((count - 1))); do
+    # Current item path
+    item_path="$layout_path.splits[$i]"
+    
+    # Check if this is the first pane (no need to split)
+    if [ "$i" -eq 0 ] && [ "$parent_index" = "0.0" ]; then
+      # First pane of the session
+      current_index="$parent_index"
+    else
+      # Create a new split
+      split_type=""
+      if [ "$layout_type" = "horizontal" ]; then
+        split_type="-h"
+      elif [ "$layout_type" = "vertical" ]; then
+        split_type="-v"
+      fi
+      
+      # Split the parent pane
+      tmux split-window $split_type -t "$session_name":"$parent_index" -c "$WORKDIR"
+      
+      # Get the new pane index
+      current_index=$(tmux display -p -t "$session_name" "#{window_index}.#{pane_index}")
+    fi
+    
+    # Get current item type
+    has_type=$(yq -r "$item_path | has(\"type\")" "$CONFIG_FILE")
+    has_command=$(yq -r "$item_path | has(\"command\")" "$CONFIG_FILE")
 
-tmux select-pane -t "$SESSION":0.0
-exec tmux attach -t "$SESSION"
+    # Handle sizing - adjust all but the last pane
+    if [ "$i" -lt "$((count - 1))" ]; then
+      size=$(yq -r "$item_path.size" "$CONFIG_FILE")
+      # Extract percentage and remove % symbol if present
+      size_percent=$(echo "$size" | sed 's/%//g')
+      
+      if [ "$layout_type" = "horizontal" ]; then
+        # Get current window width
+        window_width=$(tmux display -p -t "$session_name":"$current_index" '#{window_width}')
+        # Calculate target width
+        target_width=$(( window_width * size_percent / 100 ))
+        tmux resize-pane -t "$session_name":"$current_index" -x "$target_width"
+      else
+        # Get current window height
+        window_height=$(tmux display -p -t "$session_name":"$current_index" '#{window_height}')
+        # Calculate target height
+        target_height=$(( window_height * size_percent / 100 ))
+        tmux resize-pane -t "$session_name":"$current_index" -y "$target_height"
+      fi
+    fi
+
+    # If this is a container, recursively process it
+    if [ "$has_type" = "true" ]; then
+      build_layout "$parent_id-$i" "$item_path" "$current_index"
+    fi
+    
+    # If this has a command, run it
+    if [ "$has_command" = "true" ]; then
+      pane_command=$(yq -r "$item_path.command" "$CONFIG_FILE")
+      tmux send-keys -t "$session_name":"$current_index" "$pane_command" C-m
+      
+      # Save the pane id
+      pane_id=$(yq -r "$item_path.id" "$CONFIG_FILE")
+      if [ "$pane_id" != "null" ]; then
+        # Map id to index for later reference
+        eval "${pane_id}_index=$current_index"
+      fi
+    fi
+  done
+}
+
+# Start building the layout recursively
+build_layout "root" ".layout" "0.0"
+
+# Set focus to the initial pane if specified
+initial_focus=$(yq -r '.session.initial_focus' "$CONFIG_FILE")
+if [ "$initial_focus" != "null" ] && [ -n "$initial_focus" ]; then
+  # Get the pane index for the specified id
+  focus_pane_index=$(eval echo \$${initial_focus}_index)
+  if [ -n "$focus_pane_index" ]; then
+    tmux select-pane -t "$session_name":"$focus_pane_index"
+  fi
+else
+  # Default to first pane
+  tmux select-pane -t "$session_name":0.0
+fi
+
+# Attach to the session
+exec tmux attach -t "$session_name"

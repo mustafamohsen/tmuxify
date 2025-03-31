@@ -1,0 +1,27 @@
+# Basic 2-Pane Layout
+# A simple side-by-side arrangement with code editor and terminal
+
+session:
+  name: "dev"  # Or null to use auto-naming
+  initial_focus: editor
+
+layout:
+  type: horizontal  # Side-by-side split
+  splits:
+    - id: editor
+      size: 60%  # Takes 60% of window width
+      command: "nvim ."  # Replace with your preferred editor
+    - id: terminal
+      size: 40%  # Takes 40% of window width
+      command: "clear && echo '✓ Ready'"
+
+# Result:
+# |---------------------------------|
+# |                 |               |
+# |                 |               |
+# |                 |               |
+# |     editor      |   terminal    |
+# |                 |               |
+# |                 |               |
+# |                 |               |
+# |---------------------------------|

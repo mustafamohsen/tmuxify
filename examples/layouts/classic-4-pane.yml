@@ -1,3 +1,6 @@
+# Classic 4-Pane Layout
+# The original Tmuxify layout with editor, assistant, git, and terminal
+
 session:
   name: null  # Auto-generate from folder path
   initial_focus: editor  # Focus this pane when session starts
@@ -30,7 +33,7 @@ layout:
               size: 50%
               command: "clear"
 
-# This creates the classic 4-pane layout:
+# Result:
 # |------------------------------------------------|
 # |                   |         assistant          |
 # |                   |----------------------------|
