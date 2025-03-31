@@ -26,15 +26,33 @@ case "$1" in
       # Check if the download was successful and the file is not empty
       if [ -s "$TEMP_FILE" ]; then
         # Attempt to move and set permissions
-        if mv "$TEMP_FILE" /usr/local/bin/tmuxify && chmod +x /usr/local/bin/tmuxify; then
-          echo "✅ tmuxify updated successfully to version $(tmuxify --version | cut -d ' ' -f 3)"
-          exit 0
+        # Get the directory of the currently running script to update in place
+        SCRIPT_PATH=$(command -v "$0") || SCRIPT_PATH="$0" # Handle direct execution ./tmuxify
+        INSTALL_DIR=$(dirname "$SCRIPT_PATH")
+        INSTALL_PATH="$INSTALL_DIR/$(basename "$SCRIPT_PATH")"
+
+        # Check if we have write permissions
+        if [ -w "$INSTALL_DIR" ] && [ -w "$INSTALL_PATH" ]; then
+            if mv "$TEMP_FILE" "$INSTALL_PATH" && chmod +x "$INSTALL_PATH"; then
+              echo "✅ tmuxify updated successfully to version $($INSTALL_PATH --version | cut -d ' ' -f 3)"
+              exit 0
+            else
+              echo "❌ Failed to move updated script to $INSTALL_PATH."
+              rm -f "$TEMP_FILE" # Clean up temp file on failure
+              exit 1
+            fi
         else
-          echo "❌ Failed to move or set permissions for the updated script."
-          echo "   You might need to run the update command with sudo:"
-          echo "   sudo tmuxify --update"
-          rm -f "$TEMP_FILE" # Clean up temp file on failure
-          exit 1
+           echo "❌ Insufficient permissions to write to $INSTALL_PATH."
+           echo "   Attempting update using sudo..."
+           if sudo mv "$TEMP_FILE" "$INSTALL_PATH" && sudo chmod +x "$INSTALL_PATH"; then
+               echo "✅ tmuxify updated successfully using sudo to version $($INSTALL_PATH --version | cut -d ' ' -f 3)"
+               exit 0
+           else
+               echo "❌ Failed to update using sudo."
+               # Temp file might be moved by sudo mv, or not. Clean up if it still exists.
+               [ -f "$TEMP_FILE" ] && rm -f "$TEMP_FILE"
+               exit 1
+           fi
         fi
       else
         echo "❌ Downloaded file is empty. Update failed."
@@ -111,23 +129,32 @@ if [ ! -f "$CONFIG_FILE" ]; then
   create_default_layout() {
     echo " L-> Using default 4-pane layout."
     tmux new-session -d -s "$session_name" -c "$WORKDIR" "nvim ." # Pane 0.0 (editor)
-    tmux split-window -h -t "$session_name:0.0" -c "$WORKDIR"     # Pane 0.1 (becomes container)
-    tmux resize-pane -t "$session_name:0.0" -x "50%"
 
-    tmux split-window -v -t "$session_name:0.1" -c "$WORKDIR"     # Pane 0.2 (assistant)
-    tmux resize-pane -t "$session_name:0.1" -y "50%"
-    tmux send-keys -t "$session_name:0.2" "echo 'Top Right Pane (e.g., aider)'" C-m # Changed default cmd
+    # *** ADDED FOR RESIZING ***
+    # Enable aggressive resize for the window to maintain proportions on terminal resize
+    tmux set-window-option -t "$session_name:0" aggressive-resize on
+    # **************************
 
-    tmux split-window -h -t "$session_name:0.1" -c "$WORKDIR"     # Pane 0.3 (terminal) - split the bottom part
-    # Now we have 0.0 (editor), 0.2 (assistant), 0.1 (bottom left - lazygit), 0.3 (bottom right - terminal)
-    # The new split creates 0.3, the remaining part of the vertical split is 0.1
+    tmux split-window -h -t "$session_name:0.0" -c "$WORKDIR"     # Pane 0.1 (becomes container for right side)
+    tmux resize-pane -t "$session_name:0.0" -x "50%"              # Resize editor to 50% width
 
-    # Resize the bottom horizontal split (0.1 vs 0.3)
-    tmux resize-pane -t "$session_name:0.1" -x "50%"
+    # Split the right side container (0.1) vertically
+    tmux split-window -v -t "$session_name:0.1" -c "$WORKDIR"     # Pane 0.2 (top right)
+    tmux resize-pane -t "$session_name:0.1" -y "50%"              # Resize top container (0.1) to 50% height, making 0.2 bottom right
+
+    # At this point: 0.0 (editor), 0.1 (top right), 0.2 (bottom right container)
+    # We need to split 0.2 horizontally
+    # The `split-window -h -t 0.2` creates pane 0.3 to the right of 0.2
+    tmux split-window -h -t "$session_name:0.2" -c "$WORKDIR"     # Pane 0.3 (bottom rightmost)
+
+    # Now we have 0.0 (editor), 0.1 (top right), 0.2 (bottom left), 0.3 (bottom rightmost)
+    # Resize the bottom horizontal split (0.2 vs 0.3)
+    tmux resize-pane -t "$session_name:0.2" -x "50%"             # Resize bottom left (0.2) to 50% width
 
     # Send commands to the correct panes
-    tmux send-keys -t "$session_name:0.1" "echo 'Bottom Left (e.g., lazygit)'" C-m # Changed default cmd
-    tmux send-keys -t "$session_name:0.3" "clear && echo 'Bottom Right (terminal)'" C-m # Changed default cmd
+    tmux send-keys -t "$session_name:0.1" "echo 'Top Right Pane (e.g., aider)'" C-m
+    tmux send-keys -t "$session_name:0.2" "echo 'Bottom Left (e.g., lazygit)'" C-m
+    tmux send-keys -t "$session_name:0.3" "clear && echo 'Bottom Right (terminal)'" C-m
 
     # Select initial pane (editor)
     tmux select-pane -t "$session_name:0.0"
@@ -143,6 +170,11 @@ fi
 # Create the initial session with a temporary pane (which becomes the first pane 0.0)
 tmux new-session -d -s "$session_name" -c "$WORKDIR"
 echo " L-> Building layout from $CONFIG_FILE..."
+
+# *** ADDED FOR RESIZING ***
+# Enable aggressive resize for the window to maintain proportions on terminal resize
+tmux set-window-option -t "$session_name:0" aggressive-resize on
+# **************************
 
 # Global associative array hack for pane id -> index mapping (requires bash/zsh, POSIX sh fallback below)
 if [ -n "$BASH_VERSION" ] || [ -n "$ZSH_VERSION" ]; then
@@ -180,7 +212,7 @@ get_pane_index() {
 
     local safe_pane_id=$(echo "$pane_id" | sed 's/[^a-zA-Z0-9_]/_/g')
 
-    if [ -n "$BASH_VERSION" ] || [ -n "$ZSH_VERSION" ]; then
+    if [ -n "$BASH_VERSION" ] || [ [ -n "$ZSH_VERSION" ] && type -A pane_id_map > /dev/null 2>&1 ]; then
         echo "${pane_id_map[$safe_pane_id]}"
     else
         # Use eval carefully
@@ -233,7 +265,7 @@ build_layout() {
           exit 1
       fi
 
-      # *** THE FIX IS HERE ***
+      # *** THE FIX IS HERE (from previous step) ***
       # Split the *parent* pane and capture the NEW pane's index directly
       # The parent_index pane itself becomes the container for the remaining items
       current_index=$(tmux split-window $split_type -t "$session_name:$parent_index" -c "$WORKDIR" -P -F "#{window_index}.#{pane_index}")
@@ -265,9 +297,11 @@ build_layout() {
              else
                 if [ "$layout_type" = "horizontal" ]; then
                     # Resize width (-x). Target the pane we just designated/created.
+                    # Use percentage directly with resize-pane
                     tmux resize-pane -t "$session_name:$current_index" -x "$size_percent%"
                 elif [ "$layout_type" = "vertical" ]; then
                     # Resize height (-y). Target the pane we just designated/created.
+                    # Use percentage directly with resize-pane
                     tmux resize-pane -t "$session_name:$current_index" -y "$size_percent%"
                 fi
                 # echo "Debug: Resized $current_index ${layout_type}ly to $size_percent%" # Debugging line
@@ -336,10 +370,6 @@ else
   echo " L-> Setting initial focus to first pane (0.0)."
   tmux select-pane -t "$session_name:0.0"
 fi
-
-# Kill the very first temporary pane (0.0) IF it was purely a container
-# This is tricky and might not be necessary with the new split logic.
-# Let's test without killing it first. The -P flag should prevent the extra pane issue.
 
 # Attach to the newly created and configured session
 echo "✅ Session '$session_name' created successfully. Attaching..."
