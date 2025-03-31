@@ -3,16 +3,17 @@
 **Instantly launch fully customized `tmux` workspaces.**
 
 Tmuxify creates dynamic, modular, and highly customizable tmux sessions configured through YAML.  
-It auto-detects the current folder and builds your workspace even if no configuration is present.
+It auto-detects the current folder and builds your workspace — even without any config file.
 
 ---
 
 ## 🚀 Features
 
-- **Modular**: Define any layout using `.tmuxify.yml`.
-- **Smart Defaults**: Works out-of-the-box with a built-in default layout.
-- **Dynamic Session Names**: Session names are based on the full folder path.
-- **Shell Independent**: Works on macOS, Linux, WSL.
+- **Modular**: Define any layout using `.tmuxify.yml`
+- **Smart Defaults**: Works out-of-the-box without config
+- **Dynamic Session Naming**: Based on full folder path
+- **CLI Flags**: Built-in `--version`, `--update`, `--help`
+- **Shell-Independent**: Works on macOS, Linux, WSL
 
 ---
 
@@ -23,32 +24,43 @@ It auto-detects the current folder and builds your workspace even if no configur
 - [`tmux`](https://github.com/tmux/tmux)
 - [`yq`](https://github.com/mikefarah/yq)
 
-### Quick Install
+### One-liner install or update:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/mustafamohsen/tmuxify/refs/heads/main/tmuxify \
-  -o /usr/local/bin/tmuxify && chmod +x /usr/local/bin/tmuxify
+tmuxify --update
 ```
+
+> `tmuxify` is now self-updating — no installer script required!
 
 ---
 
 ## ⚙️ Usage
 
-Run this from any folder:
+From any project directory, just run:
 
 ```sh
 tmuxify
 ```
 
-### 🔹 If `.tmuxify.yml` exists:
-Tmuxify uses it to create your custom workspace layout.
+### With Config (`.tmuxify.yml`):
+Custom layout and commands are loaded.
 
-### 🔹 If `.tmuxify.yml` is missing:
-Tmuxify uses the **built-in default layout**.
+### Without Config:
+A default layout is used automatically (see below).
 
 ---
 
-## 🛠 Default Layout (No YAML Required)
+## 🧰 Command-line Flags
+
+```sh
+tmuxify --version    # Show version
+tmuxify --update     # Download and install the latest version
+tmuxify --help       # Show usage instructions
+```
+
+---
+
+## 🛠 Default Layout (used if no `.tmuxify.yml`)
 
 ```yaml
 session:
@@ -71,7 +83,7 @@ panes:
     command: "clear"
 ```
 
-### Layout Explained:
+### Layout Overview:
 
 ```
 |------------------------------------------------|
@@ -83,22 +95,30 @@ panes:
 ```
 
 - `primary`: Code editor (left half)
-- `secondary`: AI assistant (top right)
-- `lmicro`: Git or log viewer (bottom right-left)
-- `rmicro`: Shell or micro-tool (bottom right-right)
+- `secondary`: AI assistant or helper (top right)
+- `lmicro`: Git or logs (bottom right-left)
+- `rmicro`: Terminal or REPL (bottom right-right)
 
 ---
 
 ## 🧩 Custom Layout
 
-To override the defaults, create a `.tmuxify.yml` file in your project folder with your own pane definitions and layout structure.
+To customize your dev environment:
+
+1. Create a `.tmuxify.yml` file in your project root
+2. Define layout, pane commands, and sizes
+3. Run `tmuxify`
+
+See `.tmuxify.yml.example` for reference.
 
 ---
 
 ## 📚 Contribute
 
-PRs and suggestions are welcome!  
-To propose features or improvements, open an issue or submit a PR.
+PRs and suggestions are welcome!
+
+- File issues for bugs or feature requests
+- Open a PR to add a layout mode, plugin, or integration
 
 ---
 
