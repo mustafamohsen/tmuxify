@@ -29,7 +29,15 @@ It auto-detects the current folder and builds your workspace — even without an
 - [`tmux`](https://github.com/tmux/tmux)
 - [`yq`](https://github.com/mikefarah/yq)
 
-### One-liner install or update:
+### First time install
+#### macOS and linux
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/mustafamohsen/tmuxify/main/tmuxify \
+  -o /usr/local/bin/tmuxify && chmod +x /usr/local/bin/tmuxify
+```
+
+### One-liner update
 
 ```sh
 tmuxify --update
