@@ -1,0 +1,62 @@
+#!/usr/bin/env sh
+
+command -v yq >/dev/null || { echo "yq required: https://github.com/mikefarah/yq"; exit 1; }
+command -v tmux >/dev/null || { echo "tmux required: https://github.com/tmux/tmux"; exit 1; }
+
+WORKDIR=$(pwd)
+
+# Create a unique session name based on the full path
+SESSION=$(echo "$WORKDIR" | sed 's/[\/\.]/_/g' | sed 's/^_//')
+
+# Check existing session
+tmux has-session -t "$SESSION" 2>/dev/null && exec tmux attach -t "$SESSION"
+
+# YAML config file path
+CONFIG_FILE="$WORKDIR/.tmuxify.yml"
+
+# If YAML doesn't exist, use defaults
+if [ ! -f "$CONFIG_FILE" ]; then
+  left_width=50
+  right_top_height=50
+  right_bottom_left_width=50
+
+  primary_cmd="nvim ."
+  secondary_cmd="aider"
+  rmicro_cmd="lazygit"
+  lmicro_cmd="clear"
+else
+  left_width=$(yq '.layout.left_pane_width_percent' "$CONFIG_FILE")
+  right_top_height=$(yq '.layout.right_top_height_percent' "$CONFIG_FILE")
+  right_bottom_left_width=$(yq '.layout.right_bottom_left_width_percent' "$CONFIG_FILE")
+
+  primary_cmd=$(yq -r '.panes.primary.command' "$CONFIG_FILE")
+  secondary_cmd=$(yq -r '.panes.secondary.command' "$CONFIG_FILE")
+  rmicro_cmd=$(yq -r '.panes.rmicro.command' "$CONFIG_FILE")
+  lmicro_cmd=$(yq -r '.panes.lmicro.command' "$CONFIG_FILE")
+fi
+
+# Create primary pane (pane 0)
+tmux new-session -d -s "$SESSION" -c "$WORKDIR" "$primary_cmd"
+
+# Split vertically: right pane (pane 1)
+tmux split-window -h -t "$SESSION":0.0 -c "$WORKDIR"
+tmux resize-pane -t "$SESSION":0.0 -x "$(($(tmux display -p '#{window_width}') * left_width / 100))"
+
+# Split right pane horizontally: secondary (pane 1), bottom pane (pane 2)
+tmux split-window -v -t "$SESSION":0.1 -c "$WORKDIR"
+tmux resize-pane -t "$SESSION":0.1 -y "$(($(tmux display -p '#{window_height}') * right_top_height / 100))"
+tmux send-keys -t "$SESSION":0.1 "$secondary_cmd" C-m
+
+# Split bottom pane vertically: rmicro (pane 2), lmicro (pane 3)
+tmux split-window -h -t "$SESSION":0.2 -c "$WORKDIR"
+bottom_right_width=$(tmux display -p -t "$SESSION":0.2 '#{pane_width}')
+rmicro_width=$((bottom_right_width * right_bottom_left_width / 100))
+tmux resize-pane -t "$SESSION":0.2 -x "$rmicro_width"
+
+tmux send-keys -t "$SESSION":0.2 "$rmicro_cmd" C-m
+tmux send-keys -t "$SESSION":0.3 "$lmicro_cmd" C-m
+
+# Select primary pane
+tmux select-pane -t "$SESSION":0.0
+
+exec tmux attach -t "$SESSION"

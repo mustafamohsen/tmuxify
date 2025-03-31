@@ -1,0 +1,18 @@
+session:
+  name: null
+  main_pane: "primary"
+
+layout:
+  left_pane_width_percent: 50           
+  right_top_height_percent: 50          
+  right_bottom_left_width_percent: 50   
+
+panes:
+  primary:
+    command: "nvim ."
+  secondary:
+    command: "aider"
+  rmicro:
+    command: "lazygit"
+  lmicro:
+    command: "clear"
