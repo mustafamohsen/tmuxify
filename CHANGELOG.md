@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.3.0] – 2025-03-31
+
+### Added
+- Extra layouts organized into folders
+
 ## [2.2.0] – 2025-03-31
 
 ### Added
