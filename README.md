@@ -105,6 +105,32 @@ Explore `examples/layouts/` for pre-built configurations organized by use case.
 tmuxify --file examples/layouts/golang-dev.yml
 ```
 
+## Contributing
+
+Contributions are welcome and appreciated! Here are several ways you can contribute:
+
+### Bug Reports
+- Use the GitHub issue tracker to report bugs
+- Describe what happened and what you expected
+- Include steps to reproduce the issue
+- Mention your OS, tmux version, and shell environment
+
+### Feature Requests
+- Open an issue describing the feature and its value
+- Tag it as an enhancement
+- If possible, include examples of how you'd use the feature
+
+### Pull Requests
+Before creating a pull request, please open an issue and discuss the fix or improvement
+
+### Layout Contributions
+We especially welcome contributions of new layout templates!
+- Add your layout to the `examples/layouts/` directory
+- Include a descriptive comment header explaining the layout's purpose
+- Make sure to add ASCII art showing the resulting layout
+
+Thank you for helping make Tmuxify better!
+
 ## Backward Compatibility
 
 Tmuxify v2+ automatically handles the legacy layout format of v1.x, applying the classic 4-pane structure for projects without a `.tmuxify.yml` file.
