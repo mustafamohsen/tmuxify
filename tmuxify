@@ -3,10 +3,8 @@
 VERSION=$(cat "$(dirname "$0")/VERSION" 2>/dev/null || echo "unknown")
 REPO_URL="https://raw.githubusercontent.com/mustafamohsen/tmuxify/main/tmuxify"
 
-# Initialize variables
 CUSTOM_CONFIG=""
 
-# Process arguments iteratively
 while [ $# -gt 0 ]; do
   case "$1" in
     --version|-v)
@@ -25,25 +23,20 @@ while [ $# -gt 0 ]; do
       ;;
     --update|-u)
       echo "Updating tmuxify..."
-      # Fetch to a temporary file first for safety
       TEMP_FILE=$(mktemp)
       if curl -fsSL "$REPO_URL" -o "$TEMP_FILE"; then
-        # Check if the download was successful and the file is not empty
         if [ -s "$TEMP_FILE" ]; then
-          # Attempt to move and set permissions
-          # Get the directory of the currently running script to update in place
-          SCRIPT_PATH=$(command -v "$0") || SCRIPT_PATH="$0" # Handle direct execution ./tmuxify
+          SCRIPT_PATH=$(command -v "$0") || SCRIPT_PATH="$0"
           INSTALL_DIR=$(dirname "$SCRIPT_PATH")
           INSTALL_PATH="$INSTALL_DIR/$(basename "$SCRIPT_PATH")"
 
-          # Check if we have write permissions
           if [ -w "$INSTALL_DIR" ] && [ -w "$INSTALL_PATH" ]; then
               if mv "$TEMP_FILE" "$INSTALL_PATH" && chmod +x "$INSTALL_PATH"; then
                 echo "✅ tmuxify updated successfully to version $($INSTALL_PATH --version | cut -d ' ' -f 3)"
                 exit 0
               else
                 echo "❌ Failed to move updated script to $INSTALL_PATH."
-                rm -f "$TEMP_FILE" # Clean up temp file on failure
+                rm -f "$TEMP_FILE"
                 exit 1
               fi
           else
@@ -54,19 +47,17 @@ while [ $# -gt 0 ]; do
                  exit 0
              else
                  echo "❌ Failed to update using sudo."
-                 # Temp file might be moved by sudo mv, or not. Clean up if it still exists.
                  [ -f "$TEMP_FILE" ] && rm -f "$TEMP_FILE"
                  exit 1
              fi
           fi
         else
           echo "❌ Downloaded file is empty. Update failed."
-          rm -f "$TEMP_FILE" # Clean up temp file
+          rm -f "$TEMP_FILE"
           exit 1
         fi
       else
         echo "❌ Failed to download the latest version from $REPO_URL"
-        # TEMP_FILE might not exist if curl failed early, so check before removing
         [ -f "$TEMP_FILE" ] && rm -f "$TEMP_FILE"
         exit 1
       fi
@@ -79,7 +70,7 @@ while [ $# -gt 0 ]; do
     --file|-f)
       if [ -n "$2" ] && [ "${2#-}" = "$2" ]; then
         CUSTOM_CONFIG="$2"
-        shift # Skip the next argument as we've consumed it
+        shift
       else
         echo "❌ Error: Missing file path after --file/-f flag"
         exit 1
@@ -94,16 +85,13 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-# --- Core logic starts here ---
 command -v yq >/dev/null || { echo "❌ Error: yq is required but not found. Please install it (https://github.com/mikefarah/yq)."; exit 1; }
 command -v tmux >/dev/null || { echo "❌ Error: tmux is required but not found. Please install it (https://github.com/tmux/tmux)."; exit 1; }
 
 WORKDIR=$(pwd)
 DEFAULT_CONFIG_FILE="$WORKDIR/.tmuxify.yml"
 
-# Determine which config file to use
 if [ -n "$CUSTOM_CONFIG" ]; then
-  # Check if custom config file exists and is readable
   if [ ! -f "$CUSTOM_CONFIG" ] || [ ! -r "$CUSTOM_CONFIG" ]; then
     echo "❌ Error: Specified layout file '$CUSTOM_CONFIG' does not exist or is not readable"
     exit 1
@@ -115,30 +103,25 @@ else
   CONFIG_FILE="$DEFAULT_CONFIG_FILE"
 fi
 
-# Generate a session name from the working directory path
-# Replace / with _ and remove leading/trailing _ and excessive __
+# Generate session name from directory path
 auto_session_name=$(basename "$WORKDIR")
-if [ "$auto_session_name" = "/" ]; then # Handle root directory case
+if [ "$auto_session_name" = "/" ]; then
     parent_dir=$(basename "$(dirname "$WORKDIR")")
-    if [ -z "$parent_dir" ]; then # Truly root /
+    if [ -z "$parent_dir" ]; then
         auto_session_name="root"
     else
-        # Use parent dir name if current is just / (e.g., from /home)
         auto_session_name=$(echo "$WORKDIR" | sed 's|/$||' | sed 's|.*/||')
      fi
 fi
-# Further sanitize: remove dots, replace sequences of non-alphanumeric with single _, remove leading/trailing _
+
 auto_session_name=$(echo "$auto_session_name" | sed 's/\./_/g; s/[^a-zA-Z0-9_-][^a-zA-Z0-9_-]*/_/g; s/^_//; s/_$//')
-# If empty after sanitization (e.g., directory name was just '.'), use default
 if [ -z "$auto_session_name" ]; then
     auto_session_name="tmuxify_session"
 fi
 
-
 # Set session name from config or use auto-generated name
 if [ -f "$CONFIG_FILE" ]; then
-  session_name=$(yq -r '.session.name // ""' "$CONFIG_FILE") # Use // "" for default empty string if null
-  # If null or empty string in config, use auto-generated name
+  session_name=$(yq -r '.session.name // ""' "$CONFIG_FILE")
   if [ "$session_name" = "null" ] || [ -z "$session_name" ]; then
     session_name="$auto_session_name"
     echo "ℹ️ Using auto-generated session name: $session_name"
@@ -150,7 +133,7 @@ else
   echo "ℹ️ No layout file found. Using auto-generated session name: $session_name"
 fi
 
-# If a session with this name already exists, attach to it
+# Attach to existing session if it exists
 if tmux has-session -t "$session_name" 2>/dev/null; then
   echo "✅ Attaching to existing session: $session_name"
   exec tmux attach -t "$session_name"
@@ -160,73 +143,45 @@ echo "🚀 Creating new session: $session_name"
 
 # Load default layout if no config exists
 if [ ! -f "$CONFIG_FILE" ]; then
-  # Create default layout for backward compatibility (classic 4-pane)
   create_default_layout() {
     echo " L-> Using default 4-pane layout."
     tmux new-session -d -s "$session_name" -c "$WORKDIR" "nvim ." # Pane 0.0 (editor)
-
-    # *** ADDED FOR RESIZING ***
-    # Enable aggressive resize for the window to maintain proportions on terminal resize
     tmux set-window-option -t "$session_name:0" aggressive-resize on
-    # **************************
-
-    tmux split-window -h -t "$session_name:0.0" -c "$WORKDIR"     # Pane 0.1 (becomes container for right side)
-    tmux resize-pane -t "$session_name:0.0" -x "50%"              # Resize editor to 50% width
-
-    # Split the right side container (0.1) vertically
-    tmux split-window -v -t "$session_name:0.1" -c "$WORKDIR"     # Pane 0.2 (top right)
-    tmux resize-pane -t "$session_name:0.1" -y "50%"              # Resize top container (0.1) to 50% height, making 0.2 bottom right
-
-    # At this point: 0.0 (editor), 0.1 (top right), 0.2 (bottom right container)
-    # We need to split 0.2 horizontally
-    # The `split-window -h -t 0.2` creates pane 0.3 to the right of 0.2
-    tmux split-window -h -t "$session_name:0.2" -c "$WORKDIR"     # Pane 0.3 (bottom rightmost)
-
-    # Now we have 0.0 (editor), 0.1 (top right), 0.2 (bottom left), 0.3 (bottom rightmost)
-    # Resize the bottom horizontal split (0.2 vs 0.3)
-    tmux resize-pane -t "$session_name:0.2" -x "50%"             # Resize bottom left (0.2) to 50% width
-
-    # Send commands to the correct panes
+    tmux split-window -h -t "$session_name:0.0" -c "$WORKDIR"     # Pane 0.1
+    tmux resize-pane -t "$session_name:0.0" -x "50%"              
+    tmux split-window -v -t "$session_name:0.1" -c "$WORKDIR"     # Pane 0.2
+    tmux resize-pane -t "$session_name:0.1" -y "50%"              
+    tmux split-window -h -t "$session_name:0.2" -c "$WORKDIR"     # Pane 0.3
+    tmux resize-pane -t "$session_name:0.2" -x "50%"             
     tmux send-keys -t "$session_name:0.1" "echo 'Top Right Pane (e.g., aider)'" C-m
     tmux send-keys -t "$session_name:0.2" "echo 'Bottom Left (e.g., lazygit)'" C-m
     tmux send-keys -t "$session_name:0.3" "clear && echo 'Bottom Right (terminal)'" C-m
-
-    # Select initial pane (editor)
     tmux select-pane -t "$session_name:0.0"
   }
 
   create_default_layout
   exec tmux attach -t "$session_name"
-  exit 0 # Should not be reached due to exec
+  exit 0
 fi
 
-# --- Config file exists, proceed with YAML parsing ---
-
-# Create the initial session with a temporary pane (which becomes the first pane 0.0)
+# Create the initial session with a temporary pane
 tmux new-session -d -s "$session_name" -c "$WORKDIR"
 echo " L-> Building layout from $CONFIG_FILE..."
-
-# *** ADDED FOR RESIZING ***
-# Enable aggressive resize for the window to maintain proportions on terminal resize
 tmux set-window-option -t "$session_name:0" aggressive-resize on
-# **************************
 
-# Global associative array hack for pane id -> index mapping (requires bash/zsh, POSIX sh fallback below)
+# Set up pane id to index mapping
 if [ -n "$BASH_VERSION" ] || [ -n "$ZSH_VERSION" ]; then
-    declare -A pane_id_map # Use associative array if supported
+    declare -A pane_id_map
 else
-    # POSIX sh doesn't have associative arrays. We'll use eval as before, but carefully.
-    # This requires pane IDs to be valid shell variable names.
     echo "⚠️ Warning: Using POSIX sh. Pane IDs should be valid shell variable names (e.g., 'editor', 'my_pane_1')."
 fi
 
-# Function to map pane ID to pane index
+# Map pane ID to pane index
 set_pane_index() {
     local pane_id="$1"
     local pane_index="$2"
     if [ -z "$pane_id" ] || [ "$pane_id" = "null" ]; then return; fi
 
-    # Sanitize pane_id to be a safer variable name prefix if using eval
     local safe_pane_id=$(echo "$pane_id" | sed 's/[^a-zA-Z0-9_]/_/g')
     if [ "$pane_id" != "$safe_pane_id" ]; then
          echo "⚠️ Warning: Pane ID '$pane_id' sanitized to '$safe_pane_id' for variable mapping."
@@ -235,12 +190,11 @@ set_pane_index() {
     if [ -n "$BASH_VERSION" ] || [ -n "$ZSH_VERSION" ]; then
         pane_id_map["$safe_pane_id"]="$pane_index"
     else
-        # Use eval carefully for POSIX sh compatibility
         eval "${safe_pane_id}_pane_index=\"$pane_index\""
     fi
 }
 
-# Function to get pane index from ID
+# Get pane index from ID
 get_pane_index() {
     local pane_id="$1"
     if [ -z "$pane_id" ] || [ "$pane_id" = "null" ]; then echo ""; return; fi
@@ -250,17 +204,15 @@ get_pane_index() {
     if [ -n "$BASH_VERSION" ] || [ [ -n "$ZSH_VERSION" ] && type -A pane_id_map > /dev/null 2>&1 ]; then
         echo "${pane_id_map[$safe_pane_id]}"
     else
-        # Use eval carefully
         eval echo \"\$${safe_pane_id}_pane_index\"
     fi
 }
 
-
-# Function to recursively build the layout
+# Recursively build the layout from configuration
 build_layout() {
-  local parent_id="$1"      # Just for debugging/context, not functional
-  local layout_path="$2"    # yq path to the current layout node (e.g., .layout, .layout.splits[1])
-  local parent_index="$3"   # tmux index of the pane to be split (e.g., 0.0, 0.1)
+  local parent_id="$1"
+  local layout_path="$2"
+  local parent_index="$3"
 
   local layout_type
   local count
@@ -268,130 +220,93 @@ build_layout() {
   local item_path
   local current_index
   local split_type
-  local has_type has_command size size_percent window_dim target_dim
+  local has_type has_command size size_percent
   local pane_command pane_id
 
-  # Get layout type (horizontal/vertical) for the current node
   layout_type=$(yq -r "$layout_path.type" "$CONFIG_FILE")
-
-  # Process each item (pane or nested layout) in the current node's 'splits' array
   count=$(yq -r "$layout_path.splits | length" "$CONFIG_FILE")
+  
   for i in $(seq 0 $((count - 1))); do
-    # yq path to the current item being processed
     item_path="$layout_path.splits[$i]"
 
-    # Determine the tmux index for the current item
-    # The very first item (i=0) reuses the parent_index (which starts as 0.0)
-    # Subsequent items (i>0) require splitting the parent_index
     if [ "$i" -eq 0 ]; then
-      # If this is the first item *in this split list*, it occupies the space defined by parent_index
       current_index="$parent_index"
     else
-      # If this is not the first item, split the *original* parent pane to create space
       split_type=""
       if [ "$layout_type" = "horizontal" ]; then
-        split_type="-h" # Split horizontally (add pane to the right)
+        split_type="-h"
       elif [ "$layout_type" = "vertical" ]; then
-        split_type="-v" # Split vertically (add pane below)
+        split_type="-v"
       else
           echo "❌ Error: Invalid layout type '$layout_type' at path '$layout_path'. Must be 'horizontal' or 'vertical'."
-          # Attempt to kill the session to prevent leaving a broken state
           tmux kill-session -t "$session_name" 2>/dev/null
           exit 1
       fi
 
-      # *** THE FIX IS HERE (from previous step) ***
-      # Split the *parent* pane and capture the NEW pane's index directly
-      # The parent_index pane itself becomes the container for the remaining items
       current_index=$(tmux split-window $split_type -t "$session_name:$parent_index" -c "$WORKDIR" -P -F "#{window_index}.#{pane_index}")
       if [ -z "$current_index" ]; then
           echo "❌ Error: Failed to split window for pane $parent_index. Check tmux logs."
           tmux kill-session -t "$session_name" 2>/dev/null
           exit 1
       fi
-      # echo "Debug: Split $parent_index $split_type -> New pane index: $current_index" # Debugging line
     fi
 
-    # Get properties of the current item (pane or nested layout)
-    has_type=$(yq -r "$item_path | has(\"type\")" "$CONFIG_FILE")       # Does it have nested splits?
-    has_command=$(yq -r "$item_path | has(\"command\")" "$CONFIG_FILE") # Does it define a command?
-    pane_id=$(yq -r "$item_path.id // \"null\"" "$CONFIG_FILE")             # Get pane ID if defined
+    has_type=$(yq -r "$item_path | has(\"type\")" "$CONFIG_FILE")
+    has_command=$(yq -r "$item_path | has(\"command\")" "$CONFIG_FILE")
+    pane_id=$(yq -r "$item_path.id // \"null\"" "$CONFIG_FILE")
 
-    # --- Handle Sizing ---
-    # Apply size *only to the newly created/designated pane* (`current_index`).
-    # The last pane in a split automatically takes the remaining space.
+    # Apply sizing to newly created panes (except the last one)
     if [ "$i" -lt "$((count - 1))" ]; then
-        size=$(yq -r "$item_path.size // \"\"" "$CONFIG_FILE") # Default to empty if size missing
+        size=$(yq -r "$item_path.size // \"\"" "$CONFIG_FILE")
         if [ -n "$size" ]; then
-            # Extract percentage and remove % symbol if present
             size_percent=$(echo "$size" | sed 's/%//g')
 
-            # Validate size_percent is a number
-             if ! echo "$size_percent" | grep -Eq '^[0-9]+$'; then
-                 echo "⚠️ Warning: Invalid size '$size' for item $i at '$item_path'. Must be a percentage (e.g., '50%'). Skipping resize."
-             else
+            if ! echo "$size_percent" | grep -Eq '^[0-9]+$'; then
+                echo "⚠️ Warning: Invalid size '$size' for item $i at '$item_path'. Must be a percentage (e.g., '50%'). Skipping resize."
+            else
                 if [ "$layout_type" = "horizontal" ]; then
-                    # Resize width (-x). Target the pane we just designated/created.
-                    # Use percentage directly with resize-pane
                     tmux resize-pane -t "$session_name:$current_index" -x "$size_percent%"
                 elif [ "$layout_type" = "vertical" ]; then
-                    # Resize height (-y). Target the pane we just designated/created.
-                    # Use percentage directly with resize-pane
                     tmux resize-pane -t "$session_name:$current_index" -y "$size_percent%"
                 fi
-                # echo "Debug: Resized $current_index ${layout_type}ly to $size_percent%" # Debugging line
-             fi
+            fi
         else
-             echo "⚠️ Warning: Missing 'size' for item $i at '$item_path' (not the last item). Equal distribution assumed by tmux."
+            echo "⚠️ Warning: Missing 'size' for item $i at '$item_path' (not the last item). Equal distribution assumed by tmux."
         fi
     fi
 
-    # --- Recursive Call or Command Execution ---
-
-    # If this item is a nested layout container (has "type"), recurse
+    # Process nested layouts recursively
     if [ "$has_type" = "true" ]; then
-      # echo "Debug: Recursing into $item_path, passing new parent index $current_index" # Debugging line
       build_layout "$parent_id-$i" "$item_path" "$current_index"
     fi
 
-    # If this item defines a command, run it in the pane
+    # Execute commands if specified
     if [ "$has_command" = "true" ]; then
       pane_command=$(yq -r "$item_path.command" "$CONFIG_FILE")
-      # Use C-m (Enter) to execute the command
       tmux send-keys -t "$session_name:$current_index" "$pane_command" C-m
-      # echo "Debug: Sent command to $current_index: $pane_command" # Debugging line
 
-      # Map the pane ID to its final tmux index if an ID was provided
       if [ "$pane_id" != "null" ]; then
         set_pane_index "$pane_id" "$current_index"
-        # echo "Debug: Mapped ID '$pane_id' to index '$current_index'" # Debugging line
       fi
     fi
 
-    # If this item is *neither* a nested layout *nor* has a command, it's implicitly a basic shell pane.
-    # We might still want to map its ID if provided.
+    # Handle basic panes with IDs but no commands
     if [ "$has_type" = "false" ] && [ "$has_command" = "false" ]; then
         if [ "$pane_id" != "null" ]; then
             set_pane_index "$pane_id" "$current_index"
-            # echo "Debug: Mapped ID '$pane_id' to index '$current_index' for basic pane" # Debugging line
         fi
-         # Optionally send a 'clear' or leave it as a default shell
-         # tmux send-keys -t "$session_name:$current_index" "clear" C-m
     fi
 
-  done # End of loop processing items in 'splits'
+  done
 }
 
-# Start building the layout recursively from the root layout definition (.layout)
-# The initial pane created by `tmux new-session` is always 0.0
+# Start building the layout from the root
 build_layout "root" ".layout" "0.0"
 
-# --- Final Focus ---
-# Set focus to the initial pane if specified in the config
+# Set focus to the initial pane if specified
 initial_focus=$(yq -r '.session.initial_focus // ""' "$CONFIG_FILE")
 focus_pane_index=""
 if [ -n "$initial_focus" ] && [ "$initial_focus" != "null" ]; then
-  # Get the pane index for the specified id
   focus_pane_index=$(get_pane_index "$initial_focus")
   if [ -n "$focus_pane_index" ]; then
     echo " L-> Setting initial focus to pane ID '$initial_focus' (index $focus_pane_index)."
@@ -401,11 +316,10 @@ if [ -n "$initial_focus" ] && [ "$initial_focus" != "null" ]; then
     tmux select-pane -t "$session_name:0.0"
   fi
 else
-  # Default to first pane (index 0.0) if not specified or null
   echo " L-> Setting initial focus to first pane (0.0)."
   tmux select-pane -t "$session_name:0.0"
 fi
 
-# Attach to the newly created and configured session
+# Attach to the session
 echo "✅ Session '$session_name' created successfully. Attaching..."
 exec tmux attach -t "$session_name"

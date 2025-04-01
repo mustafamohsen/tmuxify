@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.1] – 2025-04-01
+
+### Changed
+- Improved code readability by cleaning up unnecessary comments
+- Refined README layout for better clarity and professionalism
+- Added minimal but strategic comments to enhance maintainability
+
 ## [2.3.0] – 2025-03-31
 
 ### Added
