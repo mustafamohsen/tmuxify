@@ -1,0 +1,25 @@
+# Spark Cluster Management Layout
+# Monitor and control Spark master and worker nodes
+
+session:
+  name: "spark-cluster"
+  initial_focus: master
+
+layout:
+  type: horizontal
+  splits:
+    - id: master
+      size: 50%
+      command: "ssh master-node && clear"
+    - id: worker
+      size: 50%
+      command: "ssh worker-node && clear"
+
+# Result:
+# |------------------------------------------|
+# |                      |                   |
+# |                      |                   |
+# |        master        |      worker       |
+# |    (Master node)     |   (Worker node)   |
+# |                      |                   |
+# |------------------------------------------|

@@ -1,0 +1,28 @@
+# Triple SSH Connection Layout
+# Connect to three remote hosts simultaneously
+
+session:
+  name: "multi-ssh"
+  initial_focus: host_a
+
+layout:
+  type: horizontal
+  splits:
+    - id: host_a
+      size: 33%
+      command: "ssh user@hostA"
+    - id: host_b
+      size: 33%
+      command: "ssh user@hostB"
+    - id: host_c
+      size: 34%
+      command: "ssh user@hostC"
+
+# Result:
+# |---------------------------------------|
+# |            |            |             |
+# |            |            |             |
+# |   host_a   |   host_b   |   host_c    |
+# |  (Host A)  |  (Host B)  |  (Host C)   |
+# |            |            |             |
+# |---------------------------------------|

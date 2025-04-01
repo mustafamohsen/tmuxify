@@ -1,0 +1,25 @@
+# Multi-VPN Monitoring Layout
+# Monitor multiple VPN endpoints simultaneously
+
+session:
+  name: "vpn-check"
+  initial_focus: vpn1
+
+layout:
+  type: horizontal
+  splits:
+    - id: vpn1
+      size: 50%
+      command: "ssh user@vpn1"
+    - id: vpn2
+      size: 50%
+      command: "ssh user@vpn2"
+
+# Result:
+# |------------------------------------------|
+# |                      |                   |
+# |                      |                   |
+# |         vpn1         |        vpn2       |
+# |      (VPN node 1)    |    (VPN node 2)   |
+# |                      |                   |
+# |------------------------------------------|

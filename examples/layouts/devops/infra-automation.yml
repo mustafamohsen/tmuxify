@@ -1,0 +1,28 @@
+# Infrastructure Automation Layout
+# Environment for Ansible and Terraform infrastructure management
+
+session:
+  name: "infra-automation"
+  initial_focus: ansible
+
+layout:
+  type: vertical
+  splits:
+    - id: ansible
+      size: 60%
+      command: "cd ansible && nvim playbooks"
+    - id: terraform
+      size: 40%
+      command: "cd terraform && terraform plan"
+
+# Result:
+# |------------------------------------------|
+# |                                          |
+# |                 ansible                  |
+# |            (Ansible playbooks)           |
+# |                                          |
+# |------------------------------------------|
+# |                                          |
+# |                terraform                 |
+# |           (Terraform planning)           |
+# |------------------------------------------|

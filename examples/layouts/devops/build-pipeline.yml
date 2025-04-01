@@ -1,0 +1,25 @@
+# Build Pipeline Monitoring Layout
+# View and control CI/CD build pipelines
+
+session:
+  name: "build-pipeline"
+  initial_focus: builds
+
+layout:
+  type: horizontal
+  splits:
+    - id: builds
+      size: 60%
+      command: "clear && echo 'Viewing build pipeline logs...'"
+    - id: pipeline_cmds
+      size: 40%
+      command: "clear && echo 'Run pipeline commands here'"
+
+# Result:
+# |------------------------------------------|
+# |                      |                   |
+# |                      |                   |
+# |        builds        |   pipeline_cmds   |
+# |    (Build logs)      |    (Commands)     |
+# |                      |                   |
+# |------------------------------------------|

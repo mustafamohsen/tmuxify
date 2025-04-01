@@ -1,0 +1,25 @@
+# Container Management Layout
+# Monitor Docker containers and Kubernetes pods
+
+session:
+  name: "containers"
+  initial_focus: docker
+
+layout:
+  type: horizontal
+  splits:
+    - id: docker
+      size: 50%
+      command: "watch -n 2 docker ps"
+    - id: kubectl
+      size: 50%
+      command: "kubectl get pods --watch"
+
+# Result:
+# |------------------------------------------|
+# |                      |                   |
+# |                      |                   |
+# |        docker        |      kubectl      |
+# |  (Docker containers) |   (K8s pods)      |
+# |                      |                   |
+# |------------------------------------------|

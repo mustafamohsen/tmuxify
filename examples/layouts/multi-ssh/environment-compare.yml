@@ -1,0 +1,28 @@
+# Environment Comparison Layout
+# Compare three different environments side by side
+
+session:
+  name: "env-compare"
+  initial_focus: dev
+
+layout:
+  type: horizontal
+  splits:
+    - id: dev
+      size: 33%
+      command: "ssh dev-env"
+    - id: staging
+      size: 34%
+      command: "ssh staging-env"
+    - id: production
+      size: 33%
+      command: "ssh prod-env"
+
+# Result:
+# |---------------------------------------|
+# |            |            |             |
+# |            |            |             |
+# |    dev     |  staging   | production  |
+# |   (Dev)    | (Staging)  |   (Prod)    |
+# |            |            |             |
+# |---------------------------------------|

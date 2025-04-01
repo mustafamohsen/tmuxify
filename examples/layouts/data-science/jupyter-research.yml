@@ -1,0 +1,35 @@
+# Jupyter Research Layout
+# Environment for Jupyter lab, Python REPL, and data file management
+
+session:
+  name: "jupyter-research"
+  initial_focus: jupyter
+
+layout:
+  type: vertical
+  splits:
+    - id: jupyter
+      size: 70%
+      command: "jupyter lab"
+    - type: horizontal
+      size: 30%
+      splits:
+        - id: python_repl
+          size: 50%
+          command: "python3"
+        - id: data_files
+          size: 50%
+          command: "ls -lh data/"
+
+# Result:
+# |------------------------------------------|
+# |                                          |
+# |                                          |
+# |                 jupyter                  |
+# |              (Jupyter Lab)               |
+# |                                          |
+# |------------------------------------------|
+# |                      |                   |
+# |     python_repl      |    data_files     |
+# |      (Python)        |  (Data directory) |
+# |------------------------------------------|

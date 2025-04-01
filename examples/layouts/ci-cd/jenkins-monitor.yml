@@ -1,0 +1,25 @@
+# Jenkins Monitoring Layout
+# Real-time monitoring of Jenkins jobs and logs
+
+session:
+  name: "jenkins-monitor"
+  initial_focus: console
+
+layout:
+  type: horizontal
+  splits:
+    - id: console
+      size: 60%
+      command: "watch -n 3 'curl -s http://jenkins.local:8080/job/MyJob/lastBuild/api/json | jq .result'"
+    - id: logs
+      size: 40%
+      command: "tail -f /var/log/jenkins/jenkins.log"
+
+# Result:
+# |------------------------------------------|
+# |                      |                   |
+# |                      |                   |
+# |       console        |       logs        |
+# |    (Jenkins API)     |  (Jenkins logs)   |
+# |                      |                   |
+# |------------------------------------------|

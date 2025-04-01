@@ -1,0 +1,34 @@
+# OBS Streaming Dashboard Layout
+# Monitor and control OBS streaming software
+
+session:
+  name: "obs-dashboard"
+  initial_focus: obs_log
+
+layout:
+  type: vertical
+  splits:
+    - id: obs_log
+      size: 30%
+      command: "tail -f ~/.config/obs-studio/logs/obs.log"
+    - type: horizontal
+      size: 70%
+      splits:
+        - id: chat
+          size: 50%
+          command: "echo 'Chat client here (TUI for Twitch or YT)'"
+        - id: system_stats
+          size: 50%
+          command: "htop"
+
+# Result:
+# |------------------------------------------|
+# |                                          |
+# |                 obs_log                  |
+# |                (OBS logs)                |
+# |------------------------------------------|
+# |                      |                   |
+# |         chat         |   system_stats    |
+# |    (Chat client)     |   (System load)   |
+# |                      |                   |
+# |------------------------------------------|

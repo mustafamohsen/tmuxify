@@ -1,0 +1,25 @@
+# Integration Testing Layout
+# Environment for running and monitoring integration tests
+
+session:
+  name: "integration-tests"
+  initial_focus: console
+
+layout:
+  type: horizontal
+  splits:
+    - id: console
+      size: 50%
+      command: "echo 'Run integration tests here (e.g., npm run integration)'"
+    - id: logs
+      size: 50%
+      command: "tail -f integration.log"
+
+# Result:
+# |------------------------------------------|
+# |                      |                   |
+# |                      |                   |
+# |        console       |       logs        |
+# |    (Test runner)     |   (Test logs)     |
+# |                      |                   |
+# |------------------------------------------|

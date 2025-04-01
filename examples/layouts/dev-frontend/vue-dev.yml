@@ -1,0 +1,33 @@
+# Vue.js Development Layout
+# Complete environment for Vue.js frontend development
+
+session:
+  name: "vue-dev"
+  initial_focus: editor
+
+layout:
+  type: horizontal
+  splits:
+    - id: editor
+      size: 70%
+      command: "cd vue-app && nvim ."
+    - type: vertical
+      size: 30%
+      splits:
+        - id: dev_server
+          size: 50%
+          command: "cd vue-app && npm run serve"
+        - id: terminal
+          size: 50%
+          command: "clear && echo 'Vue dev environment ready'"
+
+# Result:
+# |------------------------------------------|
+# |                      |                   |
+# |                      |    dev_server     |
+# |                      |   (Vue server)    |
+# |        editor        |-------------------|
+# |    (Code editor)     |                   |
+# |                      |     terminal      |
+# |                      |    (Commands)     |
+# |------------------------------------------|

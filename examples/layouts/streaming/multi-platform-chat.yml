@@ -1,0 +1,28 @@
+# Multi-Platform Chat Layout
+# Monitor chats from multiple streaming platforms
+
+session:
+  name: "multi-chat"
+  initial_focus: twitch
+
+layout:
+  type: horizontal
+  splits:
+    - id: twitch
+      size: 33%
+      command: "echo 'Twitch Chat Pane'"
+    - id: youtube
+      size: 34%
+      command: "echo 'YouTube Chat Pane'"
+    - id: discord
+      size: 33%
+      command: "echo 'Discord/IRC Chat Pane'"
+
+# Result:
+# |---------------------------------------|
+# |            |            |             |
+# |            |            |             |
+# |   twitch   |  youtube   |   discord   |
+# |  (Twitch)  | (YouTube)  |  (Discord)  |
+# |            |            |             |
+# |---------------------------------------|

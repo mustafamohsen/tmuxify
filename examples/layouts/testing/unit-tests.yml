@@ -1,0 +1,29 @@
+# Unit Testing Layout
+# Environment for test-driven development
+
+session:
+  name: "unit-tests"
+  initial_focus: editor
+
+layout:
+  type: vertical
+  splits:
+    - id: editor
+      size: 70%
+      command: "nvim ."
+    - id: run_tests
+      size: 30%
+      command: "npm test -- --watch"
+
+# Result:
+# |------------------------------------------|
+# |                                          |
+# |                                          |
+# |                 editor                   |
+# |             (Code editor)                |
+# |                                          |
+# |------------------------------------------|
+# |                                          |
+# |               run_tests                  |
+# |             (Test runner)                |
+# |------------------------------------------|

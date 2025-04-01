@@ -1,0 +1,33 @@
+# General Frontend Development Layout
+# Code editor, build watcher, and browser sync setup
+
+session:
+  name: "frontend"
+  initial_focus: editor
+
+layout:
+  type: horizontal
+  splits:
+    - id: editor
+      size: 65%
+      command: "cd app && code ."
+    - type: vertical
+      size: 35%
+      splits:
+        - id: watch_build
+          size: 50%
+          command: "npm run watch"
+        - id: browser_sync
+          size: 50%
+          command: "browser-sync start --server 'app' --files 'app'"
+
+# Result:
+# |------------------------------------------|
+# |                      |                   |
+# |                      |   watch_build     |
+# |                      |   (Build watch)   |
+# |        editor        |-------------------|
+# |    (Code editor)     |                   |
+# |                      |   browser_sync    |
+# |                      |   (Live reload)   |
+# |------------------------------------------|

@@ -1,0 +1,29 @@
+# Test Dashboard Layout
+# Comprehensive test management and reporting
+
+session:
+  name: "test-dashboard"
+  initial_focus: manager
+
+layout:
+  type: vertical
+  splits:
+    - id: manager
+      size: 40%
+      command: "echo 'Test manager interface (e.g., Cypress UI or custom scripts)'"
+    - id: results
+      size: 60%
+      command: "tail -f cypress/results.log"
+
+# Result:
+# |------------------------------------------|
+# |                                          |
+# |                manager                   |
+# |             (Test manager)               |
+# |------------------------------------------|
+# |                                          |
+# |                                          |
+# |                results                   |
+# |             (Test results)               |
+# |                                          |
+# |------------------------------------------|

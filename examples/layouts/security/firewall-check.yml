@@ -1,0 +1,28 @@
+# Firewall Monitoring Layout
+# Visualize and monitor firewall rules and activity
+
+session:
+  name: "firewall-check"
+  initial_focus: iptables
+
+layout:
+  type: vertical
+  splits:
+    - id: iptables
+      size: 50%
+      command: "watch -n 3 sudo iptables -L -v --line-numbers"
+    - id: ufw
+      size: 50%
+      command: "sudo ufw status verbose"
+
+# Result:
+# |------------------------------------------|
+# |                                          |
+# |                iptables                  |
+# |             (IPTables rules)             |
+# |                                          |
+# |------------------------------------------|
+# |                                          |
+# |                   ufw                    |
+# |              (UFW status)                |
+# |------------------------------------------|

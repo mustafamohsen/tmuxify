@@ -1,0 +1,35 @@
+# Node.js Backend Development Layout
+# Complete environment for Node.js backend development
+
+session:
+  name: "node-backend"
+  initial_focus: editor
+
+layout:
+  type: vertical
+  splits:
+    - id: editor
+      size: 70%
+      command: "cd backend && nvim ."
+    - type: horizontal
+      size: 30%
+      splits:
+        - id: server
+          size: 50%
+          command: "cd backend && npm start"
+        - id: logs
+          size: 50%
+          command: "cd backend && tail -f logs/server.log"
+
+# Result:
+# |------------------------------------------|
+# |                                          |
+# |                                          |
+# |                 editor                   |
+# |             (Code editor)                |
+# |                                          |
+# |------------------------------------------|
+# |                      |                   |
+# |        server        |       logs        |
+# |    (Node server)     |  (Server logs)    |
+# |------------------------------------------|

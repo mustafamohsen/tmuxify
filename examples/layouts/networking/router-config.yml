@@ -1,0 +1,28 @@
+# Router Configuration Layout
+# Monitor and configure network routers
+
+session:
+  name: "router-config"
+  initial_focus: ssh_router
+
+layout:
+  type: vertical
+  splits:
+    - id: ssh_router
+      size: 70%
+      command: "ssh admin@192.168.1.1"
+    - id: logs
+      size: 30%
+      command: "tail -f /var/log/router.log"
+
+# Result:
+# |------------------------------------------|
+# |                                          |
+# |               ssh_router                 |
+# |           (Router terminal)              |
+# |                                          |
+# |------------------------------------------|
+# |                                          |
+# |                  logs                    |
+# |              (Router logs)               |
+# |------------------------------------------|

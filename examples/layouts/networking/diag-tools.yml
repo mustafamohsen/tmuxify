@@ -1,0 +1,33 @@
+# Network Diagnostics Layout
+# Tools for network connectivity analysis
+
+session:
+  name: "net-diag"
+  initial_focus: ping
+
+layout:
+  type: horizontal
+  splits:
+    - id: ping
+      size: 30%
+      command: "ping google.com"
+    - type: vertical
+      size: 70%
+      splits:
+        - id: traceroute
+          size: 50%
+          command: "traceroute google.com"
+        - id: tcpdump
+          size: 50%
+          command: "sudo tcpdump -i any port 80 or port 443"
+
+# Result:
+# |------------------------------------------|
+# |              |                           |
+# |              |         traceroute        |
+# |              |      (Route tracing)      |
+# |     ping     |---------------------------|
+# |  (Ping test) |                           |
+# |              |          tcpdump          |
+# |              |      (Packet capture)     |
+# |------------------------------------------|

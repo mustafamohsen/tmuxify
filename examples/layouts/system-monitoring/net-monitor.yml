@@ -1,0 +1,25 @@
+# Network Monitoring Layout
+# Visualize network connections and bandwidth usage
+
+session:
+  name: "net-monitor"
+  initial_focus: netstat
+
+layout:
+  type: horizontal
+  splits:
+    - id: netstat
+      size: 50%
+      command: "watch -n 2 netstat -tulpn"
+    - id: iftop
+      size: 50%
+      command: "sudo iftop"
+
+# Result:
+# |------------------------------------------|
+# |                      |                   |
+# |                      |                   |
+# |       netstat        |      iftop        |
+# |   (Network stats)    | (Bandwidth usage) |
+# |                      |                   |
+# |------------------------------------------|

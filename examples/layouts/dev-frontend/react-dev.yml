@@ -1,0 +1,33 @@
+# React Development Layout
+# Complete environment for React frontend development
+
+session:
+  name: "react-dev"
+  initial_focus: editor
+
+layout:
+  type: horizontal
+  splits:
+    - id: editor
+      size: 60%
+      command: "cd frontend && nvim src"
+    - type: vertical
+      size: 40%
+      splits:
+        - id: build
+          size: 50%
+          command: "cd frontend && npm run build --watch"
+        - id: terminal
+          size: 50%
+          command: "cd frontend && clear && echo 'React dev environment ready'"
+
+# Result:
+# |------------------------------------------|
+# |                      |                   |
+# |                      |      build        |
+# |                      |   (Build watch)   |
+# |        editor        |-------------------|
+# |    (Code editor)     |                   |
+# |                      |     terminal      |
+# |                      |     (Commands)    |
+# |------------------------------------------|

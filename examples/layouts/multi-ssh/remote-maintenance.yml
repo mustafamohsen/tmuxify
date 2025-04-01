@@ -1,0 +1,28 @@
+# Remote Server Maintenance Layout
+# Maintain multiple remote servers simultaneously
+
+session:
+  name: "remote-maintenance"
+  initial_focus: server1
+
+layout:
+  type: vertical
+  splits:
+    - id: server1
+      size: 50%
+      command: "ssh user@server1"
+    - id: server2
+      size: 50%
+      command: "ssh user@server2"
+
+# Result:
+# |------------------------------------------|
+# |                                          |
+# |                 server1                  |
+# |               (Server 1)                 |
+# |                                          |
+# |------------------------------------------|
+# |                                          |
+# |                 server2                  |
+# |               (Server 2)                 |
+# |------------------------------------------|

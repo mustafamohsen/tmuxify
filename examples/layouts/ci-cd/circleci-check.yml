@@ -1,0 +1,28 @@
+# CircleCI Monitoring Layout
+# Check CircleCI build status and test results
+
+session:
+  name: "circleci-check"
+  initial_focus: build_log
+
+layout:
+  type: vertical
+  splits:
+    - id: build_log
+      size: 60%
+      command: "clear && echo 'curl -s https://circleci.com/api/v1.1/project/... ?'"
+    - id: test_results
+      size: 40%
+      command: "echo 'CircleCI test logs or artifacts...'"
+
+# Result:
+# |------------------------------------------|
+# |                                          |
+# |                build_log                 |
+# |           (CircleCI build API)           |
+# |                                          |
+# |------------------------------------------|
+# |                                          |
+# |              test_results                |
+# |          (CircleCI test logs)            |
+# |------------------------------------------|

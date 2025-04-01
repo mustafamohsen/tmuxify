@@ -1,0 +1,33 @@
+# Stream Monitoring Layout
+# Monitor stream chat, logs, and controls
+
+session:
+  name: "stream-monitor"
+  initial_focus: chat
+
+layout:
+  type: horizontal
+  splits:
+    - id: chat
+      size: 40%
+      command: "echo 'Twitch Chat TUI'"
+    - type: vertical
+      size: 60%
+      splits:
+        - id: ffmpeg_log
+          size: 50%
+          command: "tail -f /tmp/ffmpeg_stream.log"
+        - id: obs_cmd
+          size: 50%
+          command: "echo 'Control OBS or other streaming software here'"
+
+# Result:
+# |------------------------------------------|
+# |                |                         |
+# |                |        ffmpeg_log       |
+# |                |      (Stream logs)      |
+# |      chat      |-------------------------|
+# |  (Chat client) |                         |
+# |                |         obs_cmd         |
+# |                |    (OBS controls)       |
+# |------------------------------------------|

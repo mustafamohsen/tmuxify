@@ -1,0 +1,25 @@
+# Intrusion Monitoring Layout
+# Real-time monitoring for intrusion attempts
+
+session:
+  name: "intrusion-monitor"
+  initial_focus: auth_log
+
+layout:
+  type: horizontal
+  splits:
+    - id: auth_log
+      size: 50%
+      command: "tail -f /var/log/auth.log"
+    - id: fail2ban
+      size: 50%
+      command: "sudo fail2ban-client status"
+
+# Result:
+# |------------------------------------------|
+# |                      |                   |
+# |                      |                   |
+# |       auth_log       |     fail2ban      |
+# |   (Authentication)   |   (Ban status)    |
+# |                      |                   |
+# |------------------------------------------|

@@ -1,0 +1,25 @@
+# GitLab Runner Monitoring Layout
+# Monitor GitLab CI/CD pipeline and runner status
+
+session:
+  name: "gitlab-runner"
+  initial_focus: pipeline
+
+layout:
+  type: horizontal
+  splits:
+    - id: pipeline
+      size: 50%
+      command: "echo 'Monitor GitLab pipeline logs here'"
+    - id: runner
+      size: 50%
+      command: "gitlab-runner list"
+
+# Result:
+# |------------------------------------------|
+# |                      |                   |
+# |                      |                   |
+# |       pipeline       |      runner       |
+# |    (Pipeline logs)   |  (Runner status)  |
+# |                      |                   |
+# |------------------------------------------|

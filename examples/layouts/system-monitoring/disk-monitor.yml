@@ -1,0 +1,28 @@
+# Disk Usage Monitoring Layout
+# Monitor disk space and I/O performance
+
+session:
+  name: "disk-monitor"
+  initial_focus: usage
+
+layout:
+  type: vertical
+  splits:
+    - id: usage
+      size: 60%
+      command: "watch -n 2 df -h"
+    - id: iostat
+      size: 40%
+      command: "iostat -x 5"
+
+# Result:
+# |------------------------------------------|
+# |                                          |
+# |                  usage                   |
+# |              (Disk usage)                |
+# |                                          |
+# |------------------------------------------|
+# |                                          |
+# |                 iostat                   |
+# |              (I/O statistics)            |
+# |------------------------------------------|

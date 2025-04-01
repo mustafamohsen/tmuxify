@@ -1,0 +1,33 @@
+# Machine Learning Training Layout
+# Environment for ML code editing, training runs, and GPU monitoring
+
+session:
+  name: "ml-training"
+  initial_focus: code
+
+layout:
+  type: horizontal
+  splits:
+    - id: code
+      size: 60%
+      command: "cd ml && nvim train.py"
+    - type: vertical
+      size: 40%
+      splits:
+        - id: run_training
+          size: 50%
+          command: "python3 train.py"
+        - id: monitor
+          size: 50%
+          command: "watch -n 2 nvidia-smi"
+
+# Result:
+# |------------------------------------------|
+# |                      |                   |
+# |                      |   run_training    |
+# |                      |   (Python run)    |
+# |        code          |-------------------|
+# |    (Code editor)     |                   |
+# |                      |     monitor       |
+# |                      |    (GPU stats)    |
+# |------------------------------------------|
