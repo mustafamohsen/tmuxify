@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.4.0] – 2025-04-02
+
+### Added
+- Support for environment variables in commands: `command: "$EDITOR ."` now expands shell variables
+- Session export feature: new `--export/-e [filename]` flag to save current tmux sessions as YAML templates
+- Enhanced validation for YAML files with better error messages
+- Tmux version compatibility checking to prevent issues with older versions
+
+### Changed
+- Improved session name sanitization warnings for both config and directory-based names
+- Better error messaging throughout for easier troubleshooting
+
 ## [2.3.1] – 2025-04-01
 
 ### Changed
