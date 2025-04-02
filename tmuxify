@@ -85,8 +85,19 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+# Dependency checks
 command -v yq >/dev/null || { echo "❌ Error: yq is required but not found. Please install it (https://github.com/mikefarah/yq)."; exit 1; }
 command -v tmux >/dev/null || { echo "❌ Error: tmux is required but not found. Please install it (https://github.com/tmux/tmux)."; exit 1; }
+
+# Check tmux version compatibility
+TMUX_VERSION=$(tmux -V | sed -E 's/tmux[^0-9]*([.0-9]+).*/\1/')
+TMUX_MAJOR=$(echo "$TMUX_VERSION" | cut -d. -f1)
+TMUX_MINOR=$(echo "$TMUX_VERSION" | cut -d. -f2)
+
+if [ "$TMUX_MAJOR" -lt 2 ] || [ "$TMUX_MAJOR" -eq 2 -a "$TMUX_MINOR" -lt 1 ]; then
+    echo "❌ Error: tmuxify requires tmux version 2.1 or newer. Detected version: $TMUX_VERSION"
+    exit 1
+fi
 
 WORKDIR=$(pwd)
 DEFAULT_CONFIG_FILE="$WORKDIR/.tmuxify.yml"
@@ -101,6 +112,38 @@ if [ -n "$CUSTOM_CONFIG" ]; then
   echo "ℹ️ Using custom layout file: $CONFIG_FILE"
 else
   CONFIG_FILE="$DEFAULT_CONFIG_FILE"
+fi
+
+# Validate YAML syntax if a config file exists
+if [ -f "$CONFIG_FILE" ]; then
+  # Attempt to parse the YAML file with yq to validate syntax
+  if ! yq eval '.' "$CONFIG_FILE" > /dev/null 2>&1; then
+    echo "❌ Error: Invalid YAML syntax in $CONFIG_FILE"
+    exit 1
+  fi
+  
+  # Check for required layout structure
+  if ! yq eval '.layout' "$CONFIG_FILE" > /dev/null 2>&1; then
+    echo "❌ Error: Missing required 'layout' section in $CONFIG_FILE"
+    exit 1
+  fi
+  
+  if ! yq eval '.layout.type' "$CONFIG_FILE" > /dev/null 2>&1; then
+    echo "❌ Error: Missing required 'layout.type' in $CONFIG_FILE"
+    exit 1
+  fi
+  
+  if ! yq eval '.layout.splits' "$CONFIG_FILE" > /dev/null 2>&1; then
+    echo "❌ Error: Missing required 'layout.splits' array in $CONFIG_FILE"
+    exit 1
+  fi
+  
+  # Validate layout type values
+  layout_type=$(yq eval '.layout.type' "$CONFIG_FILE")
+  if [ "$layout_type" != "horizontal" ] && [ "$layout_type" != "vertical" ]; then
+    echo "❌ Error: Invalid layout type '$layout_type'. Must be 'horizontal' or 'vertical'."
+    exit 1
+  fi
 fi
 
 # Generate session name from directory path
@@ -126,7 +169,18 @@ if [ -f "$CONFIG_FILE" ]; then
     session_name="$auto_session_name"
     echo "ℹ️ Using auto-generated session name: $session_name"
   else
-     echo "ℹ️ Using session name from config: $session_name"
+    # Store the original name for comparison
+    original_name="$session_name"
+    
+    # Sanitize session name
+    session_name=$(echo "$session_name" | sed 's/\./_/g; s/[^a-zA-Z0-9_-][^a-zA-Z0-9_-]*/_/g; s/^_//; s/_$//')
+    
+    # Check if session name was modified during sanitization
+    if [ "$original_name" != "$session_name" ]; then
+      echo "⚠️ Session name '$original_name' sanitized to '$session_name' for tmux compatibility"
+    else
+      echo "ℹ️ Using session name from config: $session_name"
+    fi
   fi
 else
   session_name="$auto_session_name"
