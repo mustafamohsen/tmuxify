@@ -261,9 +261,14 @@ if [ "$auto_session_name" = "/" ]; then
      fi
 fi
 
+# Store original auto-generated name before sanitization
+original_auto_name="$auto_session_name"
+
 auto_session_name=$(echo "$auto_session_name" | sed 's/\./_/g; s/[^a-zA-Z0-9_-][^a-zA-Z0-9_-]*/_/g; s/^_//; s/_$//')
 if [ -z "$auto_session_name" ]; then
     auto_session_name="tmuxify_session"
+elif [ "$original_auto_name" != "$auto_session_name" ]; then
+    echo "⚠️ Directory name '$original_auto_name' sanitized to '$auto_session_name' for tmux compatibility"
 fi
 
 # Set session name from config or use auto-generated name
@@ -281,7 +286,7 @@ if [ -f "$CONFIG_FILE" ]; then
     
     # Check if session name was modified during sanitization
     if [ "$original_name" != "$session_name" ]; then
-      echo "⚠️ Session name '$original_name' sanitized to '$session_name' for tmux compatibility"
+      echo "⚠️ Session name '$original_name' from config sanitized to '$session_name' for tmux compatibility"
     else
       echo "ℹ️ Using session name from config: $session_name"
     fi
