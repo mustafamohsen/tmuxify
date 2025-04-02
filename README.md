@@ -51,13 +51,14 @@ tmuxify
 
 ## Command-Line Options
 
-| Option           | Alias | Description                                     |
-|------------------|-------|-------------------------------------------------|
-| `--version`      | `-v`  | Show Tmuxify version                            |
-| `--update`       | `-u`  | Download and install the latest version         |
-| `--help`         | `-h`  | Display usage instructions                      |
-| `--list`         | `-l`  | List all active tmux sessions                   |
-| `--file FILE`    | `-f`  | Use a specific layout file                      |
+| Option           | Alias | Description                                                        |
+|------------------|-------|--------------------------------------------------------------------|
+| `--version`      | `-v`  | Show Tmuxify version                                               |
+| `--update`       | `-u`  | Download and install the latest version                            |
+| `--help`         | `-h`  | Display usage instructions                                         |
+| `--list`         | `-l`  | List all active tmux sessions                                      |
+| `--file FILE`    | `-f`  | Use a specific layout file                                         |
+| `--export [FILE]`| `-e`  | Export current tmux session layout to YAML (simplified representation) |
 
 ## Layout Configuration
 
@@ -105,7 +106,7 @@ Explore `examples/layouts/` for pre-built configurations organized by use case.
 tmuxify --file examples/layouts/golang-dev.yml
 ```
 
-You can learn more about creating your own custom layouts using [this guide](https://github.com/mustafamohsen/tmuxify/wiki/Layout-System-Basics)
+You can learn more about creating your own custom layouts using [this guide](https://github.com/mustafamohsen/tmuxify/wiki/Layout-System-Basics). We also encourage you to [contribute your own useful layouts](#layout-contributions)!
 
 ## Contributing
 
