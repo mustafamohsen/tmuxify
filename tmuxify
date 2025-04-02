@@ -4,6 +4,8 @@ VERSION=$(cat "$(dirname "$0")/VERSION" 2>/dev/null || echo "unknown")
 REPO_URL="https://raw.githubusercontent.com/mustafamohsen/tmuxify/main/tmuxify"
 
 CUSTOM_CONFIG=""
+EXPORT_FLAG=0
+EXPORT_FILENAME=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -12,13 +14,14 @@ while [ $# -gt 0 ]; do
       exit 0
       ;;
     --help|-h)
-      echo "Usage: tmuxify [--version|-v] [--update|-u] [--help|-h] [--list|-l] [--file|-f LAYOUT_FILE]"
+      echo "Usage: tmuxify [--version|-v] [--update|-u] [--help|-h] [--list|-l] [--file|-f LAYOUT_FILE] [--export|-e [FILENAME]]"
       echo
       echo "  --version, -v            Show version"
       echo "  --update, -u             Download latest version"
       echo "  --help, -h               Show help"
       echo "  --list, -l               List active tmux sessions"
       echo "  --file, -f LAYOUT_FILE   Use specific layout file (overrides .tmuxify.yml)"
+      echo "  --export, -e [FILENAME]  Export current tmux session layout to YAML"
       exit 0
       ;;
     --update|-u)
@@ -76,6 +79,14 @@ while [ $# -gt 0 ]; do
         exit 1
       fi
       ;;
+    --export|-e)
+      EXPORT_FLAG=1
+      # Optional filename parameter
+      if [ -n "$2" ] && [ "${2#-}" = "$2" ]; then
+        EXPORT_FILENAME="$2"
+        shift
+      fi
+      ;;
     *)
       echo "❌ Unknown option: $1"
       echo "Run 'tmuxify --help' for usage information."
@@ -88,6 +99,93 @@ done
 # Dependency checks
 command -v yq >/dev/null || { echo "❌ Error: yq is required but not found. Please install it (https://github.com/mikefarah/yq)."; exit 1; }
 command -v tmux >/dev/null || { echo "❌ Error: tmux is required but not found. Please install it (https://github.com/tmux/tmux)."; exit 1; }
+
+# Function to export the current tmux session as a YAML template
+export_session() {
+  # Check if we're in a tmux session
+  if [ -z "$TMUX" ]; then
+    echo "❌ Error: Not currently in a tmux session. Please run this inside tmux."
+    exit 1
+  fi
+  
+  # Get current session info
+  current_session=$(tmux display-message -p '#{session_name}')
+  
+  # Set the export filename
+  if [ -z "$EXPORT_FILENAME" ]; then
+    EXPORT_FILENAME="./${current_session}-layout.yml"
+  fi
+  
+  echo "ℹ️ Exporting current session '$current_session' layout to $EXPORT_FILENAME..."
+  
+  # Start building the YAML file
+  cat > "$EXPORT_FILENAME" << EOL
+# $current_session layout exported by tmuxify
+# Generated on $(date)
+
+session:
+  name: "$current_session"
+  initial_focus: main
+
+layout:
+  type: horizontal
+  splits:
+EOL
+  
+  # Get window and pane information
+  window_count=$(tmux display-message -p '#{session_windows}')
+  current_window=$(tmux display-message -p '#{window_index}')
+  pane_count=$(tmux display-message -p '#{window_panes}')
+  active_pane=$(tmux display-message -p '#{pane_index}')
+  
+  # Add main pane (always first)
+  cat >> "$EXPORT_FILENAME" << EOL
+    - id: main
+      size: 60%
+      command: "clear && echo 'Main pane'"
+EOL
+  
+  # Add remaining panes based on layout
+  pane_layout=$(tmux display-message -p '#{window_layout}')
+  
+  # For simplicity, we just add secondary panes with reasonable defaults
+  if [ "$pane_count" -gt 1 ]; then
+    cat >> "$EXPORT_FILENAME" << EOL
+    - type: vertical
+      size: 40%
+      splits:
+EOL
+    
+    # Add secondary panes
+    for i in $(seq 1 $((pane_count - 1))); do
+      percent=$((100 / (pane_count - 1)))
+      cat >> "$EXPORT_FILENAME" << EOL
+        - id: pane$i
+          size: ${percent}%
+          command: "clear && echo 'Pane $i'"
+EOL
+    done
+  fi
+  
+  # Add explanatory comments
+  cat >> "$EXPORT_FILENAME" << EOL
+
+# Note: This is a simplified representation of your current session.
+# You may need to adjust:
+# - Pane sizes and arrangement
+# - Commands for each pane
+# - The overall structure based on your specific layout
+EOL
+  
+  echo "✅ Layout exported to $EXPORT_FILENAME"
+  echo "ℹ️ You can use this file with: tmuxify --file $EXPORT_FILENAME"
+  exit 0
+}
+
+# Handle export if requested
+if [ "$EXPORT_FLAG" -eq 1 ]; then
+  export_session
+fi
 
 # Check tmux version compatibility
 TMUX_VERSION=$(tmux -V | sed -E 's/tmux[^0-9]*([.0-9]+).*/\1/')
