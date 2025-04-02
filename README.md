@@ -105,7 +105,7 @@ Explore `examples/layouts/` for pre-built configurations organized by use case.
 tmuxify --file examples/layouts/golang-dev.yml
 ```
 
-You can learn more about creating your own custom layouts using (this guide)[https://github.com/mustafamohsen/tmuxify/wiki/Creating-Custom-Layout]
+You can learn more about creating your own custom layouts using [this guide](https://github.com/mustafamohsen/tmuxify/wiki/Creating-Custom-Layout)
 
 ## Contributing
 
