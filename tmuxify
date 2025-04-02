@@ -21,7 +21,7 @@ while [ $# -gt 0 ]; do
       echo "  --help, -h               Show help"
       echo "  --list, -l               List active tmux sessions"
       echo "  --file, -f LAYOUT_FILE   Use specific layout file (overrides .tmuxify.yml)"
-      echo "  --export, -e [FILENAME]  Export current tmux session layout to YAML"
+      echo "  --export, -e [FILENAME]  Export current tmux session layout to YAML (simplified representation)"
       exit 0
       ;;
     --update|-u)
@@ -113,17 +113,17 @@ export_session() {
     echo "❌ Error: Not currently in a tmux session. Please run this inside tmux."
     exit 1
   fi
-  
+
   # Get current session info
   current_session=$(tmux display-message -p '#{session_name}')
-  
+
   # Set the export filename
   if [ -z "$EXPORT_FILENAME" ]; then
     EXPORT_FILENAME="./${current_session}-layout.yml"
   fi
-  
+
   echo "ℹ️ Exporting current session '$current_session' layout to $EXPORT_FILENAME..."
-  
+
   # Start building the YAML file
   cat > "$EXPORT_FILENAME" << EOL
 # $current_session layout exported by tmuxify
@@ -137,23 +137,23 @@ layout:
   type: horizontal
   splits:
 EOL
-  
+
   # Get window and pane information
   window_count=$(tmux display-message -p '#{session_windows}')
   current_window=$(tmux display-message -p '#{window_index}')
   pane_count=$(tmux display-message -p '#{window_panes}')
   active_pane=$(tmux display-message -p '#{pane_index}')
-  
+
   # Add main pane (always first)
   cat >> "$EXPORT_FILENAME" << EOL
     - id: main
       size: 60%
       command: "clear && echo 'Main pane'"
 EOL
-  
+
   # Add remaining panes based on layout
   pane_layout=$(tmux display-message -p '#{window_layout}')
-  
+
   # For simplicity, we just add secondary panes with reasonable defaults
   if [ "$pane_count" -gt 1 ]; then
     cat >> "$EXPORT_FILENAME" << EOL
@@ -161,7 +161,7 @@ EOL
       size: 40%
       splits:
 EOL
-    
+
     # Add secondary panes
     for i in $(seq 1 $((pane_count - 1))); do
       percent=$((100 / (pane_count - 1)))
@@ -172,7 +172,7 @@ EOL
 EOL
     done
   fi
-  
+
   # Add explanatory comments
   cat >> "$EXPORT_FILENAME" << EOL
 
@@ -182,7 +182,7 @@ EOL
 # - Commands for each pane
 # - The overall structure based on your specific layout
 EOL
-  
+
   echo "✅ Layout exported to $EXPORT_FILENAME"
   echo "ℹ️ You can use this file with: tmuxify --file $EXPORT_FILENAME"
   exit 0
@@ -211,7 +211,7 @@ if [ -n "$CUSTOM_CONFIG" ]; then
     echo "❌ Error: Specified layout file '$CUSTOM_CONFIG' does not exist or is not readable"
     exit 1
   fi
-  
+
   CONFIG_FILE="$CUSTOM_CONFIG"
   echo "ℹ️ Using custom layout file: $CONFIG_FILE"
 else
@@ -225,23 +225,23 @@ if [ -f "$CONFIG_FILE" ]; then
     echo "❌ Error: Invalid YAML syntax in $CONFIG_FILE"
     exit 1
   fi
-  
+
   # Check for required layout structure
   if ! yq eval '.layout' "$CONFIG_FILE" > /dev/null 2>&1; then
     echo "❌ Error: Missing required 'layout' section in $CONFIG_FILE"
     exit 1
   fi
-  
+
   if ! yq eval '.layout.type' "$CONFIG_FILE" > /dev/null 2>&1; then
     echo "❌ Error: Missing required 'layout.type' in $CONFIG_FILE"
     exit 1
   fi
-  
+
   if ! yq eval '.layout.splits' "$CONFIG_FILE" > /dev/null 2>&1; then
     echo "❌ Error: Missing required 'layout.splits' array in $CONFIG_FILE"
     exit 1
   fi
-  
+
   # Validate layout type values
   layout_type=$(yq eval '.layout.type' "$CONFIG_FILE")
   if [ "$layout_type" != "horizontal" ] && [ "$layout_type" != "vertical" ]; then
@@ -280,10 +280,10 @@ if [ -f "$CONFIG_FILE" ]; then
   else
     # Store the original name for comparison
     original_name="$session_name"
-    
+
     # Sanitize session name
     session_name=$(echo "$session_name" | sed 's/\./_/g; s/[^a-zA-Z0-9_-][^a-zA-Z0-9_-]*/_/g; s/^_//; s/_$//')
-    
+
     # Check if session name was modified during sanitization
     if [ "$original_name" != "$session_name" ]; then
       echo "⚠️ Session name '$original_name' from config sanitized to '$session_name' for tmux compatibility"
@@ -311,11 +311,11 @@ if [ ! -f "$CONFIG_FILE" ]; then
     tmux new-session -d -s "$session_name" -c "$WORKDIR" "nvim ." # Pane 0.0 (editor)
     tmux set-window-option -t "$session_name:0" aggressive-resize on
     tmux split-window -h -t "$session_name:0.0" -c "$WORKDIR"     # Pane 0.1
-    tmux resize-pane -t "$session_name:0.0" -x "50%"              
+    tmux resize-pane -t "$session_name:0.0" -x "50%"
     tmux split-window -v -t "$session_name:0.1" -c "$WORKDIR"     # Pane 0.2
-    tmux resize-pane -t "$session_name:0.1" -y "50%"              
+    tmux resize-pane -t "$session_name:0.1" -y "50%"
     tmux split-window -h -t "$session_name:0.2" -c "$WORKDIR"     # Pane 0.3
-    tmux resize-pane -t "$session_name:0.2" -x "50%"             
+    tmux resize-pane -t "$session_name:0.2" -x "50%"
     tmux send-keys -t "$session_name:0.1" "echo 'Top Right Pane (e.g., aider)'" C-m
     tmux send-keys -t "$session_name:0.2" "echo 'Bottom Left (e.g., lazygit)'" C-m
     tmux send-keys -t "$session_name:0.3" "clear && echo 'Bottom Right (terminal)'" C-m
@@ -388,7 +388,7 @@ build_layout() {
 
   layout_type=$(yq -r "$layout_path.type" "$CONFIG_FILE")
   count=$(yq -r "$layout_path.splits | length" "$CONFIG_FILE")
-  
+
   for i in $(seq 0 $((count - 1))); do
     item_path="$layout_path.splits[$i]"
 
@@ -446,16 +446,16 @@ build_layout() {
     # Execute commands if specified
     if [ "$has_command" = "true" ]; then
       pane_command=$(yq -r "$item_path.command" "$CONFIG_FILE")
-      
+
       # Expand environment variables in the command
       # First, handle $VAR style variables
       eval pane_command_expanded="\"$pane_command\""
-      
+
       # Then handle ${VAR} style variables if envsubst is available
       if [ "$has_envsubst" -eq 1 ]; then
         pane_command_expanded=$(echo "$pane_command_expanded" | envsubst)
       fi
-      
+
       tmux send-keys -t "$session_name:$current_index" "$pane_command_expanded" C-m
 
       if [ "$pane_id" != "null" ]; then
