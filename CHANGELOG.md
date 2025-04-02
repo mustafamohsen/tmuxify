@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.4.1] – 2024-07-29
+## [2.4.1] – 2025-04-02
 
 ### Changed
 - Improved clarity of `--export` flag help text regarding simplified output.
@@ -141,3 +141,4 @@
 - Command-line flags: `--version`, `--update`, `--help`
 - Smart dynamic session names from folder path
 - Default layout with `primary`, `secondary`, `lmicro`, `rmicro`
+
