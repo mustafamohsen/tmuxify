@@ -100,6 +100,12 @@ done
 command -v yq >/dev/null || { echo "❌ Error: yq is required but not found. Please install it (https://github.com/mikefarah/yq)."; exit 1; }
 command -v tmux >/dev/null || { echo "❌ Error: tmux is required but not found. Please install it (https://github.com/tmux/tmux)."; exit 1; }
 
+# Check for envsubst for environment variable expansion
+has_envsubst=0
+if command -v envsubst >/dev/null; then
+  has_envsubst=1
+fi
+
 # Function to export the current tmux session as a YAML template
 export_session() {
   # Check if we're in a tmux session
@@ -435,7 +441,17 @@ build_layout() {
     # Execute commands if specified
     if [ "$has_command" = "true" ]; then
       pane_command=$(yq -r "$item_path.command" "$CONFIG_FILE")
-      tmux send-keys -t "$session_name:$current_index" "$pane_command" C-m
+      
+      # Expand environment variables in the command
+      # First, handle $VAR style variables
+      eval pane_command_expanded="\"$pane_command\""
+      
+      # Then handle ${VAR} style variables if envsubst is available
+      if [ "$has_envsubst" -eq 1 ]; then
+        pane_command_expanded=$(echo "$pane_command_expanded" | envsubst)
+      fi
+      
+      tmux send-keys -t "$session_name:$current_index" "$pane_command_expanded" C-m
 
       if [ "$pane_id" != "null" ]; then
         set_pane_index "$pane_id" "$current_index"
