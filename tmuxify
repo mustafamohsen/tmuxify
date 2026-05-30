@@ -339,7 +339,7 @@ print_plan_node() {
 }
 
 export_session() {
-  local current_session safe_session temp_export pane_count i percent
+  local current_session safe_session export_dir export_base temp_export pane_count i percent
   command -v tmux >/dev/null || die "tmux is required for --export."
   [ -n "$TMUX" ] || die "Not currently in a tmux session. Please run this inside tmux."
 
@@ -358,7 +358,10 @@ export_session() {
   fi
 
   umask 077
-  temp_export="${EXPORT_FILENAME}.$$"
+  export_dir=$(dirname "$EXPORT_FILENAME")
+  export_base=$(basename "$EXPORT_FILENAME")
+  [ -d "$export_dir" ] || die "Export directory does not exist: $export_dir"
+  temp_export=$(mktemp "$export_dir/.${export_base}.tmp.XXXXXX") || die "Failed to create temporary export file."
   info "Exporting current session '$current_session' layout to $EXPORT_FILENAME..."
 
   pane_count=$(tmux display-message -p '#{window_panes}') || die "Failed to read pane count."
