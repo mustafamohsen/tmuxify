@@ -1,5 +1,5 @@
-# Build Pipeline Monitoring Layout
-# View and control CI/CD build pipelines
+# Build Pipeline Workbench
+# Local CI/debug command center without assuming a specific provider
 
 session:
   name: "build-pipeline"
@@ -10,16 +10,16 @@ layout:
   splits:
     - id: builds
       size: 60%
-      command: "clear && echo 'Viewing build pipeline logs...'"
+      command: >-
+        sh -lc 'clear; git status --short; echo; echo "CI helpers to try:"; echo "  make test | just ci | npm test | pytest"; echo "  gh run list/watch | glab pipeline list | act -l"'
     - id: pipeline_cmds
       size: 40%
-      command: "clear && echo 'Run pipeline commands here'"
+      command: "clear && echo 'Run read-only pipeline/debug commands here. Keep tokens in env vars, not YAML.'"
 
 # Result:
 # |------------------------------------------|
 # |                      |                   |
-# |                      |                   |
 # |        builds        |   pipeline_cmds   |
-# |    (Build logs)      |    (Commands)     |
+# |    (CI overview)     |    (Commands)     |
 # |                      |                   |
 # |------------------------------------------|

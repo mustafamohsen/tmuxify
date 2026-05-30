@@ -1,25 +1,26 @@
-# GitLab Runner Monitoring Layout
-# Monitor GitLab CI/CD pipeline and runner status
+# GitLab CI Monitoring Layout
+# Project pipeline status plus optional runner-host view
 
 session:
-  name: "gitlab-runner"
+  name: "gitlab-ci"
   initial_focus: pipeline
 
 layout:
   type: horizontal
   splits:
     - id: pipeline
-      size: 50%
-      command: "echo 'Monitor GitLab pipeline logs here'"
+      size: 60%
+      command: >-
+        sh -lc 'if command -v glab >/dev/null 2>&1; then glab pipeline list --limit 5; else echo "Install glab or replace with your GitLab pipeline API command."; fi'
     - id: runner
-      size: 50%
-      command: "gitlab-runner list"
+      size: 40%
+      command: >-
+        sh -lc 'if command -v gitlab-runner >/dev/null 2>&1; then gitlab-runner list; else echo "gitlab-runner is only expected on runner hosts."; fi'
 
 # Result:
 # |------------------------------------------|
 # |                      |                   |
-# |                      |                   |
 # |       pipeline       |      runner       |
-# |    (Pipeline logs)   |  (Runner status)  |
+# |    (Pipeline list)   |  (Runner status)  |
 # |                      |                   |
 # |------------------------------------------|

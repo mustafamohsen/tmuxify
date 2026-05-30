@@ -1,28 +1,26 @@
 # CircleCI Monitoring Layout
-# Check CircleCI build status and test results
+# API v2 starter using environment variables instead of stored tokens
 
 session:
   name: "circleci-check"
-  initial_focus: build_log
+  initial_focus: pipeline
 
 layout:
   type: vertical
   splits:
-    - id: build_log
+    - id: pipeline
       size: 60%
-      command: "clear && echo 'curl -s https://circleci.com/api/v1.1/project/... ?'"
-    - id: test_results
+      command: >-
+        sh -lc 'if [ -n "${CIRCLECI_TOKEN:-}" ] && [ -n "${CIRCLECI_PROJECT_SLUG:-}" ]; then curl -fsS -H "Circle-Token: $CIRCLECI_TOKEN" "https://circleci.com/api/v2/project/$CIRCLECI_PROJECT_SLUG/pipeline?branch=${CIRCLE_BRANCH:-main}"; else echo "Set CIRCLECI_TOKEN and CIRCLECI_PROJECT_SLUG, e.g. gh/org/repo. Do not store tokens in YAML."; fi'
+    - id: artifacts
       size: 40%
-      command: "echo 'CircleCI test logs or artifacts...'"
+      command: "clear && echo 'Artifacts/tests pane: set a workflow/job ID, then query CircleCI API v2 for test metadata or artifacts.'"
 
 # Result:
 # |------------------------------------------|
-# |                                          |
-# |                build_log                 |
-# |           (CircleCI build API)           |
-# |                                          |
+# |                pipeline                  |
+# |           (CircleCI API v2)              |
 # |------------------------------------------|
-# |                                          |
-# |              test_results                |
-# |          (CircleCI test logs)            |
+# |                artifacts                 |
+# |          (Tests / artifacts notes)       |
 # |------------------------------------------|

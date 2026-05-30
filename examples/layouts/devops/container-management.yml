@@ -1,5 +1,5 @@
 # Container Management Layout
-# Monitor Docker containers and Kubernetes pods
+# Monitor local Docker containers and Kubernetes pods safely
 
 session:
   name: "containers"
@@ -10,14 +10,15 @@ layout:
   splits:
     - id: docker
       size: 50%
-      command: "watch -n 2 docker ps"
+      command: >-
+        sh -lc 'while :; do clear; if command -v docker >/dev/null 2>&1; then docker ps; else echo "docker not installed or unavailable"; fi; sleep 2; done'
     - id: kubectl
       size: 50%
-      command: "kubectl get pods --watch"
+      command: >-
+        sh -lc 'if command -v kubectl >/dev/null 2>&1; then kubectl config current-context; kubectl get pods -n "${KUBE_NAMESPACE:-default}" --watch; else echo "kubectl unavailable or no cluster context"; fi'
 
 # Result:
 # |------------------------------------------|
-# |                      |                   |
 # |                      |                   |
 # |        docker        |      kubectl      |
 # |  (Docker containers) |   (K8s pods)      |

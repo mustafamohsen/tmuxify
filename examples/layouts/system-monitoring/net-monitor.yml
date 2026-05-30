@@ -1,25 +1,25 @@
 # Network Monitoring Layout
-# Visualize network connections and bandwidth usage
+# Visualize connections and leave privileged bandwidth tools manual
 
 session:
   name: "net-monitor"
-  initial_focus: netstat
+  initial_focus: connections
 
 layout:
   type: horizontal
   splits:
-    - id: netstat
-      size: 50%
-      command: "watch -n 2 netstat -tulpn"
-    - id: iftop
-      size: 50%
-      command: "sudo iftop"
+    - id: connections
+      size: 60%
+      command: >-
+        sh -lc 'while :; do clear; (command -v ss >/dev/null 2>&1 && ss -tulpen) || (command -v lsof >/dev/null 2>&1 && lsof -i -P -n | head -100) || netstat -an; sleep 5; done'
+    - id: bandwidth
+      size: 40%
+      command: "clear && echo 'Bandwidth tools often require privileges. Run manually after choosing an interface: sudo iftop -i <iface>, nload, or nettop on macOS.'"
 
 # Result:
 # |------------------------------------------|
 # |                      |                   |
-# |                      |                   |
-# |       netstat        |      iftop        |
-# |   (Network stats)    | (Bandwidth usage) |
+# |     connections      |     bandwidth     |
+# |   (Network stats)    |  (Manual tools)   |
 # |                      |                   |
 # |------------------------------------------|

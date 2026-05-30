@@ -1,5 +1,5 @@
 # System Monitoring Layout
-# Comprehensive system monitoring dashboard
+# Cross-platform-ish local monitoring dashboard
 
 session:
   name: "monitor"
@@ -13,10 +13,11 @@ layout:
       splits:
         - id: system
           size: 50%
-          command: "htop"
+          command: "sh -lc 'command -v htop >/dev/null 2>&1 && exec htop || exec top'"
         - id: network
           size: 50%
-          command: "echo 'Network stats will appear here'"
+          command: >-
+            sh -lc 'while :; do clear; (command -v ss >/dev/null 2>&1 && ss -tulpen) || (command -v lsof >/dev/null 2>&1 && lsof -i -P -n | head -50) || netstat -an; sleep 5; done'
     - type: horizontal
       size: 50%
       splits:
@@ -25,19 +26,16 @@ layout:
           command: "df -h"
         - id: memory
           size: 33%
-          command: "watch -n 2 free -m"
+          command: >-
+            sh -lc 'while :; do clear; (command -v free >/dev/null 2>&1 && free -m) || vm_stat 2>/dev/null || top -l 1 | head; sleep 2; done'
         - id: logs
           size: 34%
-          command: "echo 'System logs will appear here'"
+          command: >-
+            sh -lc 'if command -v journalctl >/dev/null 2>&1; then journalctl -f; elif [ -r /var/log/syslog ]; then tail -F /var/log/syslog; elif [ -r /var/log/system.log ]; then tail -F /var/log/system.log; else echo "No readable system log found."; fi'
 
 # Result:
 # |-----------------------------------------------|
-# |                      |                        |
 # |       system         |        network         |
-# |       (htop)         |                        |
-# |                      |                        |
 # |-----------------------------------------------|
-# |           |             |                     |
 # |   disk    |   memory    |        logs         |
-# |           |             |                     |
 # |-----------------------------------------------|

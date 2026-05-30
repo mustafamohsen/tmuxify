@@ -1,5 +1,5 @@
 # System Resource Monitoring Layout
-# Monitor system resources and logs
+# System resources plus readable logs when available
 
 session:
   name: "system-monitor"
@@ -10,19 +10,15 @@ layout:
   splits:
     - id: top
       size: 50%
-      command: "htop"
+      command: "sh -lc 'command -v htop >/dev/null 2>&1 && exec htop || exec top'"
     - id: logs
       size: 50%
-      command: "tail -f /var/log/syslog"
+      command: >-
+        sh -lc 'if command -v journalctl >/dev/null 2>&1; then journalctl -f; elif [ -r /var/log/syslog ]; then tail -F /var/log/syslog; elif [ -r /var/log/system.log ]; then tail -F /var/log/system.log; else echo "No readable system log found."; fi'
 
 # Result:
 # |------------------------------------------|
-# |                                          |
 # |                   top                    |
-# |           (System resources)             |
-# |                                          |
 # |------------------------------------------|
-# |                                          |
 # |                  logs                    |
-# |               (System logs)              |
 # |------------------------------------------|

@@ -1,5 +1,5 @@
 # Infrastructure Automation Layout
-# Environment for Ansible and Terraform infrastructure management
+# Ansible/Terraform workspace with safe validation-first defaults
 
 session:
   name: "infra-automation"
@@ -10,19 +10,18 @@ layout:
   splits:
     - id: ansible
       size: 60%
-      command: "cd ansible && nvim playbooks"
+      command: >-
+        sh -lc 'if [ -d ansible ]; then cd ansible && ${EDITOR:-vi} playbooks; else echo "No ./ansible directory; edit this path for your playbooks."; fi'
     - id: terraform
       size: 40%
-      command: "cd terraform && terraform plan"
+      command: >-
+        sh -lc 'if [ -d terraform ]; then cd terraform && { terraform fmt -check && terraform validate; } || echo "Review backend/workspace before running terraform plan."; else echo "No ./terraform directory; edit this path for your IaC."; fi'
 
 # Result:
 # |------------------------------------------|
-# |                                          |
 # |                 ansible                  |
 # |            (Ansible playbooks)           |
-# |                                          |
 # |------------------------------------------|
-# |                                          |
 # |                terraform                 |
-# |           (Terraform planning)           |
+# |           (fmt / validate first)         |
 # |------------------------------------------|

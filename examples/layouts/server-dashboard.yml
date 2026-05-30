@@ -1,5 +1,5 @@
 # Server Dashboard Layout
-# Logs, metrics, shell, and alerts for a local or remote server workflow
+# Logs, shell, metrics, and alerts for a local or remote server workflow
 
 session:
   name: "server-dashboard"
@@ -13,19 +13,20 @@ layout:
       splits:
         - id: logs
           size: 60%
-          command: "clear && echo 'Logs pane - replace with: tail -f /var/log/app.log'"
+          command: >-
+            sh -lc 'LOG=${SERVER_LOG:-./logs/app.log}; [ -r "$LOG" ] && tail -F "$LOG" || echo "Set SERVER_LOG to a readable log path."'
         - id: shell
           size: 40%
-          command: "clear && echo 'Server shell ready'"
+          command: "clear && echo 'Server shell ready. Local shell or run: ssh user@server.example.com'"
     - type: vertical
       size: 35%
       splits:
         - id: metrics
-          size: 50%
-          command: "clear && echo 'Metrics pane - try: top or htop'"
+          size: 60%
+          command: "sh -lc 'command -v htop >/dev/null 2>&1 && exec htop || exec top'"
         - id: alerts
-          size: 50%
-          command: "clear && echo 'Alerts pane - add your checks here'"
+          size: 40%
+          command: "clear && df -h && echo 'Add service health checks or alert commands here.'"
 
 # Result:
 # |--------------------------------------------|

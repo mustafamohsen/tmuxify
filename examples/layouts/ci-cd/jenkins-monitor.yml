@@ -1,25 +1,26 @@
 # Jenkins Monitoring Layout
-# Real-time monitoring of Jenkins jobs and logs
+# Job status and console output using env-configured Jenkins API access
 
 session:
   name: "jenkins-monitor"
-  initial_focus: console
+  initial_focus: status
 
 layout:
   type: horizontal
   splits:
+    - id: status
+      size: 50%
+      command: >-
+        sh -lc 'if [ -n "${JENKINS_URL:-}" ] && [ -n "${JENKINS_JOB:-}" ]; then curl -fsS ${JENKINS_USER:+-u "$JENKINS_USER:$JENKINS_TOKEN"} "$JENKINS_URL/job/$JENKINS_JOB/lastBuild/api/json"; else echo "Set JENKINS_URL and JENKINS_JOB. Keep tokens in environment variables."; fi'
     - id: console
-      size: 60%
-      command: "watch -n 3 'curl -s http://jenkins.local:8080/job/MyJob/lastBuild/api/json | jq .result'"
-    - id: logs
-      size: 40%
-      command: "tail -f /var/log/jenkins/jenkins.log"
+      size: 50%
+      command: >-
+        sh -lc 'if [ -n "${JENKINS_URL:-}" ] && [ -n "${JENKINS_JOB:-}" ]; then curl -fsS ${JENKINS_USER:+-u "$JENKINS_USER:$JENKINS_TOKEN"} "$JENKINS_URL/job/$JENKINS_JOB/lastBuild/consoleText" | tail -n 80; else echo "Console output appears here after Jenkins env vars are set."; fi'
 
 # Result:
 # |------------------------------------------|
 # |                      |                   |
-# |                      |                   |
-# |       console        |       logs        |
-# |    (Jenkins API)     |  (Jenkins logs)   |
+# |        status        |      console      |
+# |    (Jenkins API)     |   (Build log)     |
 # |                      |                   |
 # |------------------------------------------|

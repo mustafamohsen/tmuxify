@@ -1,5 +1,5 @@
 # Disk Usage Monitoring Layout
-# Monitor disk space and I/O performance
+# Monitor disk space and I/O performance with portable fallbacks
 
 session:
   name: "disk-monitor"
@@ -10,19 +10,14 @@ layout:
   splits:
     - id: usage
       size: 60%
-      command: "watch -n 2 df -h"
+      command: "sh -lc 'while :; do clear; df -h; sleep 2; done'"
     - id: iostat
       size: 40%
-      command: "iostat -x 5"
+      command: "sh -lc 'command -v iostat >/dev/null 2>&1 && iostat -x 5 || echo \"iostat not installed or unsupported on this OS.\"'"
 
 # Result:
 # |------------------------------------------|
-# |                                          |
 # |                  usage                   |
-# |              (Disk usage)                |
-# |                                          |
 # |------------------------------------------|
-# |                                          |
 # |                 iostat                   |
-# |              (I/O statistics)            |
 # |------------------------------------------|
