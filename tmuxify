@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
 VERSION=$(cat "$(dirname "$0")/VERSION" 2>/dev/null || echo "unknown")
 REPO_URL="https://raw.githubusercontent.com/mustafamohsen/tmuxify/main/tmuxify"
@@ -6,6 +6,45 @@ REPO_URL="https://raw.githubusercontent.com/mustafamohsen/tmuxify/main/tmuxify"
 CUSTOM_CONFIG=""
 EXPORT_FLAG=0
 EXPORT_FILENAME=""
+DRY_RUN=0
+RUN_COMMANDS=1
+UPDATED_WITH_COMMAND_NOTICE=0
+TMP_DIR=""
+SESSION_CREATED=0
+
+info() { printf '%s\n' "ℹ️ $*"; }
+success() { printf '%s\n' "✅ $*"; }
+warn() { printf '%s\n' "⚠️ $*"; }
+die() { printf '%s\n' "❌ Error: $*" >&2; exit 1; }
+
+usage() {
+  cat <<'EOF'
+Usage: tmuxify [OPTIONS]
+
+Instantly launch customized tmux workspaces from YAML.
+
+Options:
+  -v, --version              Show version
+  -u, --update               Download and install the latest version safely
+  -h, --help                 Show help
+  -l, --list                 List active tmux sessions
+  -f, --file LAYOUT_FILE     Use a specific layout file (overrides .tmuxify.yml)
+  -e, --export [FILENAME]    Export current tmux session layout to YAML
+      --dry-run              Validate and preview the layout without creating tmux sessions
+      --no-commands          Create panes without running configured commands
+
+Security note:
+  Layout commands are shell commands. Review layouts from untrusted projects first,
+  or use --dry-run / --no-commands.
+EOF
+}
+
+cleanup() {
+  if [ -n "$TMP_DIR" ] && [ -d "$TMP_DIR" ]; then
+    rm -rf "$TMP_DIR"
+  fi
+}
+trap cleanup EXIT HUP INT TERM
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -14,194 +53,111 @@ while [ $# -gt 0 ]; do
       exit 0
       ;;
     --help|-h)
-      echo "Usage: tmuxify [--version|-v] [--update|-u] [--help|-h] [--list|-l] [--file|-f LAYOUT_FILE] [--export|-e [FILENAME]]"
-      echo
-      echo "  --version, -v            Show version"
-      echo "  --update, -u             Download latest version"
-      echo "  --help, -h               Show help"
-      echo "  --list, -l               List active tmux sessions"
-      echo "  --file, -f LAYOUT_FILE   Use specific layout file (overrides .tmuxify.yml)"
-      echo "  --export, -e [FILENAME]  Export current tmux session layout to YAML (simplified representation)"
+      usage
       exit 0
       ;;
     --update|-u)
-      echo "Updating tmuxify..."
-      TEMP_FILE=$(mktemp)
-      if curl -fsSL "$REPO_URL" -o "$TEMP_FILE"; then
-        if [ -s "$TEMP_FILE" ]; then
-          SCRIPT_PATH=$(command -v "$0") || SCRIPT_PATH="$0"
-          INSTALL_DIR=$(dirname "$SCRIPT_PATH")
-          INSTALL_PATH="$INSTALL_DIR/$(basename "$SCRIPT_PATH")"
-
-          if [ -w "$INSTALL_DIR" ] && [ -w "$INSTALL_PATH" ]; then
-              if mv "$TEMP_FILE" "$INSTALL_PATH" && chmod +x "$INSTALL_PATH"; then
-                echo "✅ tmuxify updated successfully to version $($INSTALL_PATH --version | cut -d ' ' -f 3)"
-                exit 0
-              else
-                echo "❌ Failed to move updated script to $INSTALL_PATH." # Keep as is - specific failure context
-                rm -f "$TEMP_FILE"
-                exit 1
-              fi
-          else
-             echo "❌ Insufficient permissions to write to $INSTALL_PATH." # Keep as is - specific failure context
-             echo "   Attempting update using sudo..."
-             if sudo mv "$TEMP_FILE" "$INSTALL_PATH" && sudo chmod +x "$INSTALL_PATH"; then
-                 echo "✅ tmuxify updated successfully using sudo to version $($INSTALL_PATH --version | cut -d ' ' -f 3)"
-                 exit 0
-             else
-                 echo "❌ Failed to update using sudo." # Keep as is - specific failure context
-                 [ -f "$TEMP_FILE" ] && rm -f "$TEMP_FILE"
-                 exit 1
-             fi
-          fi
-        else
-          echo "❌ Error: Downloaded file is empty. Update failed."
-          rm -f "$TEMP_FILE"
-          exit 1
-        fi
-      else
-        echo "❌ Error: Failed to download the latest version from $REPO_URL"
-        [ -f "$TEMP_FILE" ] && rm -f "$TEMP_FILE"
-        exit 1
-      fi
+      UPDATE_REQUESTED=1
       ;;
     --list|-l)
+      command -v tmux >/dev/null || die "tmux is required but not found. Please install it (https://github.com/tmux/tmux)."
       echo "Active tmux sessions:"
       tmux list-sessions || echo "No active tmux sessions found."
       exit 0
       ;;
     --file|-f)
-      if [ -n "$2" ] && [ "${2#-}" = "$2" ]; then
+      if [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; then
         CUSTOM_CONFIG="$2"
         shift
       else
-        echo "❌ Error: Missing file path after --file/-f flag"
-        exit 1
+        die "Missing file path after --file/-f flag"
       fi
       ;;
     --export|-e)
       EXPORT_FLAG=1
-      # Optional filename parameter
-      if [ -n "$2" ] && [ "${2#-}" = "$2" ]; then
+      if [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; then
         EXPORT_FILENAME="$2"
         shift
       fi
       ;;
+    --dry-run)
+      DRY_RUN=1
+      ;;
+    --no-commands)
+      RUN_COMMANDS=0
+      ;;
     *)
-      # Updated this line
-      echo "❌ Error: Unknown option: $1"
-      echo "Run 'tmuxify --help' for usage information."
+      echo "❌ Error: Unknown option: $1" >&2
+      echo "Run 'tmuxify --help' for usage information." >&2
       exit 1
       ;;
   esac
   shift
 done
 
-# Dependency checks
-command -v yq >/dev/null || { echo "❌ Error: yq is required but not found. Please install it (https://github.com/mikefarah/yq)."; exit 1; }
-command -v tmux >/dev/null || { echo "❌ Error: tmux is required but not found. Please install it (https://github.com/tmux/tmux)."; exit 1; }
+safe_update() {
+  local temp_dir temp_file first_line candidate_version SCRIPT_PATH INSTALL_DIR INSTALL_PATH backup
+  command -v curl >/dev/null || die "curl is required for --update."
 
-# Check for envsubst for environment variable expansion
-has_envsubst=0
-if command -v envsubst >/dev/null; then
-  has_envsubst=1
-fi
+  info "Downloading latest tmuxify..."
+  temp_dir=$(mktemp -d 2>/dev/null || mktemp -d -t tmuxify-update) || die "Failed to create temporary directory."
+  temp_file="$temp_dir/tmuxify"
 
-# Function to export the current tmux session as a YAML template
-export_session() {
-  # Check if we're in a tmux session
-  if [ -z "$TMUX" ]; then
-    echo "❌ Error: Not currently in a tmux session. Please run this inside tmux."
-    exit 1
+  if ! curl -fsSL "$REPO_URL" -o "$temp_file"; then
+    rm -rf "$temp_dir"
+    die "Failed to download the latest version from $REPO_URL"
   fi
 
-  # Get current session info
-  current_session=$(tmux display-message -p '#{session_name}')
+  [ -s "$temp_file" ] || { rm -rf "$temp_dir"; die "Downloaded file is empty. Update failed."; }
+  first_line=$(sed -n '1p' "$temp_file")
+  case "$first_line" in
+    '#!'*) ;;
+    *) rm -rf "$temp_dir"; die "Downloaded file does not look executable. Update aborted." ;;
+  esac
 
-  # Set the export filename
-  if [ -z "$EXPORT_FILENAME" ]; then
-    EXPORT_FILENAME="./${current_session}-layout.yml"
+  chmod +x "$temp_file" || { rm -rf "$temp_dir"; die "Failed to mark downloaded candidate executable."; }
+  candidate_version=$($temp_file --version 2>/dev/null | awk '{print $3}') || candidate_version=""
+  [ -n "$candidate_version" ] || { rm -rf "$temp_dir"; die "Downloaded candidate failed version check."; }
+
+  SCRIPT_PATH=$(command -v "$0" 2>/dev/null || printf '%s' "$0")
+  INSTALL_DIR=$(dirname "$SCRIPT_PATH")
+  INSTALL_PATH="$INSTALL_DIR/$(basename "$SCRIPT_PATH")"
+
+  if [ ! -w "$INSTALL_DIR" ] || { [ -e "$INSTALL_PATH" ] && [ ! -w "$INSTALL_PATH" ]; }; then
+    rm -rf "$temp_dir"
+    die "Insufficient permissions to update $INSTALL_PATH. Re-run your package manager update, or install manually after reviewing the release. tmuxify no longer escalates with sudo automatically."
   fi
 
-  echo "ℹ️ Exporting current session '$current_session' layout to $EXPORT_FILENAME..."
-
-  # Start building the YAML file
-  cat > "$EXPORT_FILENAME" << EOL
-# $current_session layout exported by tmuxify
-# Generated on $(date)
-
-session:
-  name: "$current_session"
-  initial_focus: main
-
-layout:
-  type: horizontal
-  splits:
-EOL
-
-  # Get window and pane information
-  window_count=$(tmux display-message -p '#{session_windows}')
-  current_window=$(tmux display-message -p '#{window_index}')
-  pane_count=$(tmux display-message -p '#{window_panes}')
-  active_pane=$(tmux display-message -p '#{pane_index}')
-
-  # Add main pane (always first)
-  cat >> "$EXPORT_FILENAME" << EOL
-    - id: main
-      size: 60%
-      command: "clear && echo 'Main pane'"
-EOL
-
-  # Add remaining panes based on layout
-  pane_layout=$(tmux display-message -p '#{window_layout}')
-
-  # For simplicity, we just add secondary panes with reasonable defaults
-  if [ "$pane_count" -gt 1 ]; then
-    cat >> "$EXPORT_FILENAME" << EOL
-    - type: vertical
-      size: 40%
-      splits:
-EOL
-
-    # Add secondary panes
-    for i in $(seq 1 $((pane_count - 1))); do
-      percent=$((100 / (pane_count - 1)))
-      cat >> "$EXPORT_FILENAME" << EOL
-        - id: pane$i
-          size: ${percent}%
-          command: "clear && echo 'Pane $i'"
-EOL
-    done
+  backup="$INSTALL_PATH.bak.$$"
+  if [ -e "$INSTALL_PATH" ]; then
+    cp "$INSTALL_PATH" "$backup" || { rm -rf "$temp_dir"; die "Failed to create update backup."; }
   fi
 
-  # Add explanatory comments
-  cat >> "$EXPORT_FILENAME" << EOL
+  if mv "$temp_file" "$INSTALL_PATH" && chmod +x "$INSTALL_PATH"; then
+    [ -e "$backup" ] && rm -f "$backup"
+    rm -rf "$temp_dir"
+    success "tmuxify updated successfully to version $candidate_version"
+    exit 0
+  fi
 
-# Note: This is a simplified representation of your current session.
-# You may need to adjust:
-# - Pane sizes and arrangement
-# - Commands for each pane
-# - The overall structure based on your specific layout
-EOL
-
-  echo "✅ Layout exported to $EXPORT_FILENAME"
-  echo "ℹ️ You can use this file with: tmuxify --file $EXPORT_FILENAME"
-  exit 0
+  [ -e "$backup" ] && mv "$backup" "$INSTALL_PATH"
+  rm -rf "$temp_dir"
+  die "Failed to replace installed script; previous version restored."
 }
 
-# Handle export if requested
-if [ "$EXPORT_FLAG" -eq 1 ]; then
-  export_session
+if [ "${UPDATE_REQUESTED:-0}" -eq 1 ]; then
+  safe_update
 fi
 
-# Check tmux version compatibility
-TMUX_VERSION=$(tmux -V | sed -E 's/tmux[^0-9]*([.0-9]+).*/\1/')
-TMUX_MAJOR=$(echo "$TMUX_VERSION" | cut -d. -f1)
-TMUX_MINOR=$(echo "$TMUX_VERSION" | cut -d. -f2)
+command -v yq >/dev/null || die "yq v4 is required but not found. Please install it (https://github.com/mikefarah/yq)."
+YQ_VERSION=$(yq --version 2>/dev/null || true)
+case "$YQ_VERSION" in
+  *version\ v4*|*version\ 4*) ;;
+  *) die "Mike Farah yq v4 is required. Detected: ${YQ_VERSION:-unknown}" ;;
+esac
 
-if [ "$TMUX_MAJOR" -lt 2 ] || [ "$TMUX_MAJOR" -eq 2 -a "$TMUX_MINOR" -lt 1 ]; then
-    echo "❌ Error: tmuxify requires tmux version 2.1 or newer. Detected version: $TMUX_VERSION"
-    exit 1
+if [ "$DRY_RUN" -eq 0 ]; then
+  command -v tmux >/dev/null || die "tmux is required but not found. Please install it (https://github.com/tmux/tmux)."
 fi
 
 WORKDIR=$(pwd)
@@ -209,291 +165,433 @@ DEFAULT_CONFIG_FILE="$WORKDIR/.tmuxify.yml"
 
 if [ -n "$CUSTOM_CONFIG" ]; then
   if [ ! -f "$CUSTOM_CONFIG" ] || [ ! -r "$CUSTOM_CONFIG" ]; then
-    echo "❌ Error: Specified layout file '$CUSTOM_CONFIG' does not exist or is not readable"
-    exit 1
+    die "Specified layout file '$CUSTOM_CONFIG' does not exist or is not readable"
   fi
-
   CONFIG_FILE="$CUSTOM_CONFIG"
-  echo "ℹ️ Using custom layout file: $CONFIG_FILE"
+  info "Using custom layout file: $CONFIG_FILE"
 else
   CONFIG_FILE="$DEFAULT_CONFIG_FILE"
 fi
 
-# Validate YAML syntax if a config file exists
-if [ -f "$CONFIG_FILE" ]; then
-  # Attempt to parse the YAML file with yq to validate syntax
-  if ! yq eval '.' "$CONFIG_FILE" > /dev/null 2>&1; then
-    echo "❌ Error: Invalid YAML syntax in $CONFIG_FILE"
-    exit 1
+sanitize_name() {
+  printf '%s' "$1" | sed 's/\./_/g; s/[^a-zA-Z0-9_-][^a-zA-Z0-9_-]*/_/g; s/^_//; s/_$//'
+}
+
+init_tmp_dir() {
+  if [ -z "$TMP_DIR" ]; then
+    TMP_DIR=$(mktemp -d 2>/dev/null || mktemp -d -t tmuxify) || die "Failed to create temporary directory."
+    : > "$TMP_DIR/pane_id_map"
+    : > "$TMP_DIR/build_panes"
+    : > "$TMP_DIR/seen_ids"
+  fi
+}
+
+record_seen_id() {
+  local pane_id pane_path
+  init_tmp_dir
+  pane_id="$1"
+  pane_path="$2"
+  if [ -z "$pane_id" ] || [ "$pane_id" = "null" ]; then return 0; fi
+  if ! printf '%s' "$pane_id" | grep -Eq '^[A-Za-z][A-Za-z0-9_-]*$'; then
+    die "Invalid pane id '$pane_id' at $pane_path. Use letters, numbers, underscores, and dashes; start with a letter."
+  fi
+  if grep -Fqx "$pane_id" "$TMP_DIR/seen_ids"; then
+    die "Duplicate pane id '$pane_id' at $pane_path. Pane IDs must be unique."
+  fi
+  printf '%s\n' "$pane_id" >> "$TMP_DIR/seen_ids"
+}
+
+map_pane_id() {
+  local pane_id tmux_pane
+  init_tmp_dir
+  pane_id="$1"
+  tmux_pane="$2"
+  if [ -z "$pane_id" ] || [ "$pane_id" = "null" ]; then return 0; fi
+  printf '%s\t%s\n' "$pane_id" "$tmux_pane" >> "$TMP_DIR/pane_id_map"
+}
+
+lookup_pane_id() {
+  local pane_id
+  pane_id="$1"
+  [ -n "$TMP_DIR" ] || return 0
+  awk -F '\t' -v id="$pane_id" '$1 == id { print $2; found=1 } END { exit found ? 0 : 1 }' "$TMP_DIR/pane_id_map" 2>/dev/null
+}
+
+record_build_pane() {
+  init_tmp_dir
+  printf '%s\t%s\t%s\n' "$1" "$2" "$3" >> "$TMP_DIR/build_panes"
+}
+
+lookup_build_pane() {
+  awk -F '\t' -v path="$1" -v idx="$2" '$1 == path && $2 == idx { print $3; found=1 } END { exit found ? 0 : 1 }' "$TMP_DIR/build_panes"
+}
+
+validate_size() {
+  local size size_path
+  size="$1"
+  size_path="$2"
+  if [ -z "$size" ] || [ "$size" = "null" ]; then return 0; fi
+  if ! printf '%s' "$size" | grep -Eq '^[1-9][0-9]?%$|^100%$'; then
+    die "Invalid size '$size' at $size_path. Use 1% through 100%."
+  fi
+}
+
+validate_layout_node() {
+  local path node_type layout_type splits_type count i item_path item_type size has_nested has_command pane_id command_type
+  path="$1"
+  node_type=$(yq -r "$path | type" "$CONFIG_FILE")
+  [ "$node_type" = "!!map" ] || die "Expected layout object at $path."
+
+  layout_type=$(yq -r "$path.type // \"\"" "$CONFIG_FILE")
+  case "$layout_type" in
+    horizontal|vertical) ;;
+    *) die "Invalid layout type '$layout_type' at $path. Must be 'horizontal' or 'vertical'." ;;
+  esac
+
+  splits_type=$(yq -r "$path.splits | type" "$CONFIG_FILE")
+  [ "$splits_type" = "!!seq" ] || die "Expected non-empty splits array at $path.splits."
+  count=$(yq -r "$path.splits | length" "$CONFIG_FILE")
+  [ "$count" -gt 0 ] 2>/dev/null || die "Expected non-empty splits array at $path.splits."
+
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    item_path="$path.splits[$i]"
+    item_type=$(yq -r "$item_path | type" "$CONFIG_FILE")
+    [ "$item_type" = "!!map" ] || die "Expected object at $item_path."
+
+    size=$(yq -r "$item_path.size // \"\"" "$CONFIG_FILE")
+    validate_size "$size" "$item_path.size"
+
+    has_nested=$(yq -r "$item_path | has(\"type\")" "$CONFIG_FILE")
+    has_command=$(yq -r "$item_path | has(\"command\")" "$CONFIG_FILE")
+    pane_id=$(yq -r "$item_path.id // \"\"" "$CONFIG_FILE")
+    record_seen_id "$pane_id" "$item_path.id"
+
+    if [ "$has_nested" = "true" ]; then
+      validate_layout_node "$item_path"
+    else
+      [ -n "$pane_id" ] || [ "$has_command" = "true" ] || warn "Pane at $item_path has no id or command; it will be created as an empty shell."
+    fi
+
+    if [ "$has_command" = "true" ]; then
+      command_type=$(yq -r "$item_path.command | type" "$CONFIG_FILE")
+      [ "$command_type" = "!!str" ] || die "Expected string command at $item_path.command."
+    fi
+
+    i=$((i + 1))
+  done
+}
+
+validate_config() {
+  [ -f "$CONFIG_FILE" ] || return 0
+  if ! yq eval '.' "$CONFIG_FILE" >/dev/null 2>&1; then
+    die "Invalid YAML syntax in $CONFIG_FILE"
+  fi
+  layout_root_type=$(yq -r '.layout | type' "$CONFIG_FILE")
+  [ "$layout_root_type" = "!!map" ] || die "Missing required layout object in $CONFIG_FILE"
+  init_tmp_dir
+  : > "$TMP_DIR/seen_ids"
+  validate_layout_node ".layout"
+
+  initial_focus=$(yq -r '.session.initial_focus // ""' "$CONFIG_FILE")
+  if [ -n "$initial_focus" ] && [ "$initial_focus" != "null" ]; then
+    if ! grep -Fqx "$initial_focus" "$TMP_DIR/seen_ids"; then
+      die "session.initial_focus '$initial_focus' does not match any pane id."
+    fi
+  fi
+}
+
+print_plan_node() {
+  local path indent layout_type count i child_indent item_path pane_id size has_nested has_command label command_text
+  path="$1"
+  indent="$2"
+  layout_type=$(yq -r "$path.type" "$CONFIG_FILE")
+  count=$(yq -r "$path.splits | length" "$CONFIG_FILE")
+  printf '%s- layout: %s (%s splits)\n' "$indent" "$layout_type" "$count"
+  i=0
+  child_indent="  $indent"
+  while [ "$i" -lt "$count" ]; do
+    item_path="$path.splits[$i]"
+    pane_id=$(yq -r "$item_path.id // \"\"" "$CONFIG_FILE")
+    size=$(yq -r "$item_path.size // \"auto\"" "$CONFIG_FILE")
+    has_nested=$(yq -r "$item_path | has(\"type\")" "$CONFIG_FILE")
+    has_command=$(yq -r "$item_path | has(\"command\")" "$CONFIG_FILE")
+    label="pane"
+    [ "$has_nested" = "true" ] && label="nested"
+    printf '%s- %s id=%s size=%s' "$child_indent" "$label" "${pane_id:-none}" "$size"
+    if [ "$has_command" = "true" ]; then
+      command_text=$(yq -r "$item_path.command" "$CONFIG_FILE")
+      printf ' command=%s' "$command_text"
+    fi
+    printf '\n'
+    [ "$has_nested" = "true" ] && print_plan_node "$item_path" "    $indent"
+    i=$((i + 1))
+  done
+}
+
+export_session() {
+  local current_session safe_session temp_export pane_count i percent
+  command -v tmux >/dev/null || die "tmux is required for --export."
+  [ -n "$TMUX" ] || die "Not currently in a tmux session. Please run this inside tmux."
+
+  current_session=$(tmux display-message -p '#{session_name}') || die "Failed to read current tmux session."
+  if [ -z "$EXPORT_FILENAME" ]; then
+    safe_session=$(sanitize_name "$current_session")
+    [ -n "$safe_session" ] || safe_session="tmuxify"
+    EXPORT_FILENAME="./${safe_session}-layout.yml"
   fi
 
-  # Check for required layout structure
-  if ! yq eval '.layout' "$CONFIG_FILE" > /dev/null 2>&1; then
-    echo "❌ Error: Missing required 'layout' section in $CONFIG_FILE"
-    exit 1
+  if [ -L "$EXPORT_FILENAME" ]; then
+    die "Refusing to overwrite symlink: $EXPORT_FILENAME"
+  fi
+  if [ -e "$EXPORT_FILENAME" ]; then
+    die "Refusing to overwrite existing file: $EXPORT_FILENAME"
   fi
 
-  if ! yq eval '.layout.type' "$CONFIG_FILE" > /dev/null 2>&1; then
-    echo "❌ Error: Missing required 'layout.type' in $CONFIG_FILE"
-    exit 1
-  fi
+  umask 077
+  temp_export="${EXPORT_FILENAME}.$$"
+  info "Exporting current session '$current_session' layout to $EXPORT_FILENAME..."
 
-  if ! yq eval '.layout.splits' "$CONFIG_FILE" > /dev/null 2>&1; then
-    echo "❌ Error: Missing required 'layout.splits' array in $CONFIG_FILE"
-    exit 1
-  fi
+  pane_count=$(tmux display-message -p '#{window_panes}') || die "Failed to read pane count."
 
-  # Validate layout type values
-  layout_type=$(yq eval '.layout.type' "$CONFIG_FILE")
-  if [ "$layout_type" != "horizontal" ] && [ "$layout_type" != "vertical" ]; then
-    echo "❌ Error: Invalid layout type '$layout_type'. Must be 'horizontal' or 'vertical'."
-    exit 1
-  fi
+  {
+    printf '# %s layout exported by tmuxify\n' "$current_session"
+    printf '# Generated on %s\n\n' "$(date)"
+    printf 'session:\n  name: "%s"\n  initial_focus: main\n\n' "$current_session"
+    printf 'layout:\n  type: horizontal\n  splits:\n'
+    printf '    - id: main\n      size: 60%%\n      command: "clear && echo '\''Main pane'\''"\n'
+    if [ "$pane_count" -gt 1 ]; then
+      printf '    - type: vertical\n      size: 40%%\n      splits:\n'
+      i=1
+      percent=$((100 / (pane_count - 1)))
+      while [ "$i" -lt "$pane_count" ]; do
+        printf '        - id: pane%s\n          size: %s%%\n          command: "clear && echo '\''Pane %s'\''"\n' "$i" "$percent" "$i"
+        i=$((i + 1))
+      done
+    fi
+    printf '\n# Note: This is a simplified representation of your current session.\n'
+    printf '# Review pane sizes, arrangement, and commands before using it.\n'
+  } > "$temp_export" || { rm -f "$temp_export"; die "Failed to write export file."; }
+
+  mv "$temp_export" "$EXPORT_FILENAME" || { rm -f "$temp_export"; die "Failed to finalize export file."; }
+  success "Layout exported to $EXPORT_FILENAME"
+  info "You can use this file with: tmuxify --file $EXPORT_FILENAME"
+  exit 0
+}
+
+if [ "$EXPORT_FLAG" -eq 1 ]; then
+  export_session
 fi
+
+validate_config
 
 # Generate session name from directory path
 auto_session_name=$(basename "$WORKDIR")
-if [ "$auto_session_name" = "/" ]; then
-    parent_dir=$(basename "$(dirname "$WORKDIR")")
-    if [ -z "$parent_dir" ]; then
-        auto_session_name="root"
-    else
-        auto_session_name=$(echo "$WORKDIR" | sed 's|/$||' | sed 's|.*/||')
-     fi
-fi
-
-# Store original auto-generated name before sanitization
+[ "$auto_session_name" = "/" ] && auto_session_name="root"
 original_auto_name="$auto_session_name"
-
-auto_session_name=$(echo "$auto_session_name" | sed 's/\./_/g; s/[^a-zA-Z0-9_-][^a-zA-Z0-9_-]*/_/g; s/^_//; s/_$//')
-if [ -z "$auto_session_name" ]; then
-    auto_session_name="tmuxify_session"
-elif [ "$original_auto_name" != "$auto_session_name" ]; then
-    echo "⚠️ Directory name '$original_auto_name' sanitized to '$auto_session_name' for tmux compatibility"
+auto_session_name=$(sanitize_name "$auto_session_name")
+[ -n "$auto_session_name" ] || auto_session_name="tmuxify_session"
+if [ "$original_auto_name" != "$auto_session_name" ]; then
+  warn "Directory name '$original_auto_name' sanitized to '$auto_session_name' for tmux compatibility"
 fi
 
-# Set session name from config or use auto-generated name
 if [ -f "$CONFIG_FILE" ]; then
   session_name=$(yq -r '.session.name // ""' "$CONFIG_FILE")
-  if [ "$session_name" = "null" ] || [ -z "$session_name" ]; then
+  if [ -z "$session_name" ] || [ "$session_name" = "null" ]; then
     session_name="$auto_session_name"
-    echo "ℹ️ Using auto-generated session name: $session_name"
+    info "Using auto-generated session name: $session_name"
   else
-    # Store the original name for comparison
     original_name="$session_name"
-
-    # Sanitize session name
-    session_name=$(echo "$session_name" | sed 's/\./_/g; s/[^a-zA-Z0-9_-][^a-zA-Z0-9_-]*/_/g; s/^_//; s/_$//')
-
-    # Check if session name was modified during sanitization
+    session_name=$(sanitize_name "$session_name")
+    [ -n "$session_name" ] || die "Configured session name becomes empty after sanitization."
     if [ "$original_name" != "$session_name" ]; then
-      echo "⚠️ Session name '$original_name' from config sanitized to '$session_name' for tmux compatibility"
+      warn "Session name '$original_name' from config sanitized to '$session_name' for tmux compatibility"
     else
-      echo "ℹ️ Using session name from config: $session_name"
+      info "Using session name from config: $session_name"
     fi
   fi
 else
   session_name="$auto_session_name"
-  echo "ℹ️ No layout file found. Using auto-generated session name: $session_name"
+  info "No layout file found. Using auto-generated session name: $session_name"
 fi
 
-# Attach to existing session if it exists
-if tmux has-session -t "$session_name" 2>/dev/null; then
-  echo "✅ Attaching to existing session: $session_name"
-  exec tmux attach -t "$session_name"
-fi
-
-echo "🚀 Creating new session: $session_name"
-
-# Load default layout if no config exists
-if [ ! -f "$CONFIG_FILE" ]; then
-  create_default_layout() {
-    echo " L-> Using default 4-pane layout."
-    tmux new-session -d -s "$session_name" -c "$WORKDIR" "nvim ." # Pane 0.0 (editor)
-    tmux set-window-option -t "$session_name:0" aggressive-resize on
-    tmux split-window -h -t "$session_name:0.0" -c "$WORKDIR"     # Pane 0.1
-    tmux resize-pane -t "$session_name:0.0" -x "50%"
-    tmux split-window -v -t "$session_name:0.1" -c "$WORKDIR"     # Pane 0.2
-    tmux resize-pane -t "$session_name:0.1" -y "50%"
-    tmux split-window -h -t "$session_name:0.2" -c "$WORKDIR"     # Pane 0.3
-    tmux resize-pane -t "$session_name:0.2" -x "50%"
-    tmux send-keys -t "$session_name:0.1" "echo 'Top Right Pane (e.g., aider)'" C-m
-    tmux send-keys -t "$session_name:0.2" "echo 'Bottom Left (e.g., lazygit)'" C-m
-    tmux send-keys -t "$session_name:0.3" "clear && echo 'Bottom Right (terminal)'" C-m
-    tmux select-pane -t "$session_name:0.0"
-  }
-
-  create_default_layout
-  exec tmux attach -t "$session_name"
+if [ "$DRY_RUN" -eq 1 ]; then
+  success "Configuration is valid."
+  printf 'Session: %s\n' "$session_name"
+  if [ -f "$CONFIG_FILE" ]; then
+    printf 'Layout plan:\n'
+    print_plan_node ".layout" "  "
+  else
+    printf 'Layout plan:\n  - default 4-pane workspace\n'
+  fi
+  [ "$RUN_COMMANDS" -eq 1 ] && printf 'Commands: would run configured pane commands.\n' || printf 'Commands: disabled by --no-commands.\n'
   exit 0
 fi
 
-# Create the initial session with a temporary pane
-tmux new-session -d -s "$session_name" -c "$WORKDIR"
-echo " L-> Building layout from $CONFIG_FILE..."
-tmux set-window-option -t "$session_name:0" aggressive-resize on
-
-# Set up pane id to index mapping
-if [ -n "$BASH_VERSION" ] || [ -n "$ZSH_VERSION" ]; then
-    declare -A pane_id_map
-else
-    echo "⚠️ Warning: Using POSIX sh. Pane IDs should be valid shell variable names (e.g., 'editor', 'my_pane_1')."
+TMUX_VERSION=$(tmux -V | sed -E 's/tmux[^0-9]*([.0-9]+).*/\1/')
+TMUX_MAJOR=$(echo "$TMUX_VERSION" | cut -d. -f1)
+TMUX_MINOR=$(echo "$TMUX_VERSION" | cut -d. -f2)
+if [ "$TMUX_MAJOR" -lt 2 ] || { [ "$TMUX_MAJOR" -eq 2 ] && [ "$TMUX_MINOR" -lt 1 ]; }; then
+  die "tmuxify requires tmux version 2.1 or newer. Detected version: $TMUX_VERSION"
 fi
 
-# Map pane ID to pane index
-set_pane_index() {
-    local pane_id="$1"
-    local pane_index="$2"
-    if [ -z "$pane_id" ] || [ "$pane_id" = "null" ]; then return; fi
-
-    local safe_pane_id=$(echo "$pane_id" | sed 's/[^a-zA-Z0-9_]/_/g')
-    if [ "$pane_id" != "$safe_pane_id" ]; then
-         echo "⚠️ Warning: Pane ID '$pane_id' sanitized to '$safe_pane_id' for variable mapping."
-    fi
-
-    if [ -n "$BASH_VERSION" ] || [ -n "$ZSH_VERSION" ]; then
-        pane_id_map["$safe_pane_id"]="$pane_index"
-    else
-        eval "${safe_pane_id}_pane_index=\"$pane_index\""
-    fi
+attach_or_switch() {
+  local target_session
+  target_session="$1"
+  if [ -n "$TMUX" ]; then
+    exec tmux switch-client -t "$target_session"
+  fi
+  exec tmux attach -t "$target_session"
 }
 
-# Get pane index from ID
-get_pane_index() {
-    local pane_id="$1"
-    if [ -z "$pane_id" ] || [ "$pane_id" = "null" ]; then echo ""; return; fi
+if tmux has-session -t "$session_name" 2>/dev/null; then
+  success "Attaching to existing session: $session_name"
+  attach_or_switch "$session_name"
+fi
 
-    local safe_pane_id=$(echo "$pane_id" | sed 's/[^a-zA-Z0-9_]/_/g')
-
-    if [ -n "$BASH_VERSION" ] || [ [ -n "$ZSH_VERSION" ] && type -A pane_id_map > /dev/null 2>&1 ]; then
-        echo "${pane_id_map[$safe_pane_id]}"
-    else
-        eval echo \"\$${safe_pane_id}_pane_index\"
+tmux_or_die() {
+  if ! "$@"; then
+    if [ "$SESSION_CREATED" -eq 1 ]; then
+      tmux kill-session -t "$session_name" 2>/dev/null || true
     fi
+    die "Command failed: $*"
+  fi
 }
 
-# Recursively build the layout from configuration
+apply_size() {
+  local layout_type pane_target size_value size_percent
+  layout_type="$1"
+  pane_target="$2"
+  size_value="$3"
+  if [ -z "$size_value" ] || [ "$size_value" = "null" ]; then return 0; fi
+  size_percent=$(printf '%s' "$size_value" | sed 's/%$//')
+  if [ "$layout_type" = "horizontal" ]; then
+    tmux resize-pane -t "$pane_target" -x "$size_percent%" >/dev/null 2>&1 || warn "Could not resize pane $pane_target to width $size_value."
+  else
+    tmux resize-pane -t "$pane_target" -y "$size_percent%" >/dev/null 2>&1 || warn "Could not resize pane $pane_target to height $size_value."
+  fi
+}
+
+send_configured_command() {
+  local pane_target item_path pane_command
+  pane_target="$1"
+  item_path="$2"
+  pane_command=$(yq -r "$item_path.command" "$CONFIG_FILE")
+  if [ "$RUN_COMMANDS" -eq 0 ]; then
+    return 0
+  fi
+  if [ "$UPDATED_WITH_COMMAND_NOTICE" -eq 0 ]; then
+    info "Running commands from $CONFIG_FILE. Use --dry-run to preview or --no-commands to create panes only."
+    UPDATED_WITH_COMMAND_NOTICE=1
+  fi
+  tmux_or_die tmux send-keys -t "$pane_target" "$pane_command" C-m
+}
+
 build_layout() {
-  local parent_id="$1"
-  local layout_path="$2"
-  local parent_index="$3"
-
-  local layout_type
-  local count
-  local i
-  local item_path
-  local current_index
-  local split_type
-  local has_type has_command size size_percent
-  local pane_command pane_id
-
+  local layout_path container_pane layout_type count i prev_pane item_path current_pane split_flag previous_item_path previous_size has_nested has_command pane_id
+  layout_path="$1"
+  container_pane="$2"
   layout_type=$(yq -r "$layout_path.type" "$CONFIG_FILE")
   count=$(yq -r "$layout_path.splits | length" "$CONFIG_FILE")
 
-  for i in $(seq 0 $((count - 1))); do
+  i=0
+  prev_pane=""
+  while [ "$i" -lt "$count" ]; do
     item_path="$layout_path.splits[$i]"
-
     if [ "$i" -eq 0 ]; then
-      current_index="$parent_index"
+      current_pane="$container_pane"
     else
-      split_type=""
       if [ "$layout_type" = "horizontal" ]; then
-        split_type="-h"
-      elif [ "$layout_type" = "vertical" ]; then
-        split_type="-v"
+        split_flag="-h"
       else
-          echo "❌ Error: Invalid layout type '$layout_type' at path '$layout_path'. Must be 'horizontal' or 'vertical'."
-          tmux kill-session -t "$session_name" 2>/dev/null
-          exit 1
+        split_flag="-v"
       fi
-
-      current_index=$(tmux split-window $split_type -t "$session_name:$parent_index" -c "$WORKDIR" -P -F "#{window_index}.#{pane_index}")
-      if [ -z "$current_index" ]; then
-          echo "❌ Error: Failed to split window for pane $parent_index. Check tmux logs."
-          tmux kill-session -t "$session_name" 2>/dev/null
-          exit 1
-      fi
+      current_pane=$(tmux split-window "$split_flag" -t "$prev_pane" -c "$WORKDIR" -P -F '#{pane_id}') || {
+        tmux kill-session -t "$session_name" 2>/dev/null || true
+        die "Failed to split pane $prev_pane while building $layout_path."
+      }
+      previous_item_path="$layout_path.splits[$((i - 1))]"
+      previous_size=$(yq -r "$previous_item_path.size // \"\"" "$CONFIG_FILE")
+      apply_size "$layout_type" "$prev_pane" "$previous_size"
     fi
+    record_build_pane "$layout_path" "$i" "$current_pane"
+    prev_pane="$current_pane"
+    i=$((i + 1))
+  done
 
-    has_type=$(yq -r "$item_path | has(\"type\")" "$CONFIG_FILE")
+  i=0
+  while [ "$i" -lt "$count" ]; do
+    item_path="$layout_path.splits[$i]"
+    current_pane=$(lookup_build_pane "$layout_path" "$i")
+    has_nested=$(yq -r "$item_path | has(\"type\")" "$CONFIG_FILE")
     has_command=$(yq -r "$item_path | has(\"command\")" "$CONFIG_FILE")
-    pane_id=$(yq -r "$item_path.id // \"null\"" "$CONFIG_FILE")
+    pane_id=$(yq -r "$item_path.id // \"\"" "$CONFIG_FILE")
 
-    # Apply sizing to newly created panes (except the last one)
-    if [ "$i" -lt "$((count - 1))" ]; then
-        size=$(yq -r "$item_path.size // \"\"" "$CONFIG_FILE")
-        if [ -n "$size" ]; then
-            size_percent=$(echo "$size" | sed 's/%//g')
-
-            if ! echo "$size_percent" | grep -Eq '^[0-9]+$'; then
-                echo "⚠️ Warning: Invalid size '$size' for item $i at '$item_path'. Must be a percentage (e.g., '50%'). Skipping resize."
-            else
-                if [ "$layout_type" = "horizontal" ]; then
-                    tmux resize-pane -t "$session_name:$current_index" -x "$size_percent%"
-                elif [ "$layout_type" = "vertical" ]; then
-                    tmux resize-pane -t "$session_name:$current_index" -y "$size_percent%"
-                fi
-            fi
-        else
-            echo "⚠️ Warning: Missing 'size' for item $i at '$item_path' (not the last item). Equal distribution assumed by tmux."
-        fi
+    if [ -n "$pane_id" ] && [ "$pane_id" != "null" ]; then
+      map_pane_id "$pane_id" "$current_pane"
     fi
-
-    # Process nested layouts recursively
-    if [ "$has_type" = "true" ]; then
-      build_layout "$parent_id-$i" "$item_path" "$current_index"
+    if [ "$has_nested" = "true" ]; then
+      build_layout "$item_path" "$current_pane"
     fi
-
-    # Execute commands if specified
     if [ "$has_command" = "true" ]; then
-      pane_command=$(yq -r "$item_path.command" "$CONFIG_FILE")
-
-      # Expand environment variables in the command
-      # First, handle $VAR style variables
-      eval pane_command_expanded="\"$pane_command\""
-
-      # Then handle ${VAR} style variables if envsubst is available
-      if [ "$has_envsubst" -eq 1 ]; then
-        pane_command_expanded=$(echo "$pane_command_expanded" | envsubst)
-      fi
-
-      tmux send-keys -t "$session_name:$current_index" "$pane_command_expanded" C-m
-
-      if [ "$pane_id" != "null" ]; then
-        set_pane_index "$pane_id" "$current_index"
-      fi
+      send_configured_command "$current_pane" "$item_path"
     fi
-
-    # Handle basic panes with IDs but no commands
-    if [ "$has_type" = "false" ] && [ "$has_command" = "false" ]; then
-        if [ "$pane_id" != "null" ]; then
-            set_pane_index "$pane_id" "$current_index"
-        fi
-    fi
-
+    i=$((i + 1))
   done
 }
 
-# Start building the layout from the root
-build_layout "root" ".layout" "0.0"
+create_default_layout() {
+  local pane0 pane1 pane2 pane3
+  info "Using default 4-pane layout."
+  tmux_or_die tmux new-session -d -s "$session_name" -c "$WORKDIR" "nvim ."
+  SESSION_CREATED=1
+  tmux_or_die tmux set-window-option -t "$session_name:0" aggressive-resize on
+  pane0=$(tmux display-message -t "$session_name:0.0" -p '#{pane_id}') || die "Failed to identify initial pane."
+  pane1=$(tmux split-window -h -t "$pane0" -c "$WORKDIR" -P -F '#{pane_id}') || die "Failed to create default pane."
+  apply_size horizontal "$pane0" "50%"
+  pane2=$(tmux split-window -v -t "$pane1" -c "$WORKDIR" -P -F '#{pane_id}') || die "Failed to create default pane."
+  apply_size vertical "$pane1" "50%"
+  pane3=$(tmux split-window -h -t "$pane2" -c "$WORKDIR" -P -F '#{pane_id}') || die "Failed to create default pane."
+  apply_size horizontal "$pane2" "50%"
+  tmux_or_die tmux send-keys -t "$pane1" "echo 'Top Right Pane (e.g., aider)'" C-m
+  tmux_or_die tmux send-keys -t "$pane2" "echo 'Bottom Left (e.g., lazygit)'" C-m
+  tmux_or_die tmux send-keys -t "$pane3" "clear && echo 'Bottom Right (terminal)'" C-m
+  tmux_or_die tmux select-pane -t "$pane0"
+}
 
-# Set focus to the initial pane if specified
-initial_focus=$(yq -r '.session.initial_focus // ""' "$CONFIG_FILE")
-focus_pane_index=""
-if [ -n "$initial_focus" ] && [ "$initial_focus" != "null" ]; then
-  focus_pane_index=$(get_pane_index "$initial_focus")
-  if [ -n "$focus_pane_index" ]; then
-    echo " L-> Setting initial focus to pane ID '$initial_focus' (index $focus_pane_index)."
-    tmux select-pane -t "$session_name:$focus_pane_index"
-  else
-    echo "⚠️ Warning: Initial focus pane ID '$initial_focus' not found in the layout definition. Focusing first pane (0.0)."
-    tmux select-pane -t "$session_name:0.0"
-  fi
-else
-  echo " L-> Setting initial focus to first pane (0.0)."
-  tmux select-pane -t "$session_name:0.0"
+echo "🚀 Creating new session: $session_name"
+
+if [ ! -f "$CONFIG_FILE" ]; then
+  create_default_layout
+  success "Session '$session_name' created successfully. Attaching..."
+  attach_or_switch "$session_name"
 fi
 
-# Attach to the session
-echo "✅ Session '$session_name' created successfully. Attaching..."
-exec tmux attach -t "$session_name"
+# reset runtime maps after validation
+: > "$TMP_DIR/pane_id_map"
+: > "$TMP_DIR/build_panes"
+
+tmux_or_die tmux new-session -d -s "$session_name" -c "$WORKDIR"
+SESSION_CREATED=1
+info "Building layout from $CONFIG_FILE..."
+tmux_or_die tmux set-window-option -t "$session_name:0" aggressive-resize on
+root_pane=$(tmux display-message -t "$session_name:0.0" -p '#{pane_id}') || die "Failed to identify initial pane."
+build_layout ".layout" "$root_pane"
+
+initial_focus=$(yq -r '.session.initial_focus // ""' "$CONFIG_FILE")
+if [ -n "$initial_focus" ] && [ "$initial_focus" != "null" ]; then
+  focus_pane=$(lookup_pane_id "$initial_focus" || true)
+  if [ -n "$focus_pane" ]; then
+    info "Setting initial focus to pane ID '$initial_focus'."
+    tmux_or_die tmux select-pane -t "$focus_pane"
+  else
+    warn "Initial focus pane ID '$initial_focus' not found. Focusing first pane."
+    tmux_or_die tmux select-pane -t "$root_pane"
+  fi
+else
+  info "Setting initial focus to first pane."
+  tmux_or_die tmux select-pane -t "$root_pane"
+fi
+
+success "Session '$session_name' created successfully. Attaching..."
+attach_or_switch "$session_name"
