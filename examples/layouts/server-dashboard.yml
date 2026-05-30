@@ -1,0 +1,37 @@
+# Server Dashboard Layout
+# Logs, metrics, shell, and alerts for a local or remote server workflow
+
+session:
+  name: "server-dashboard"
+  initial_focus: shell
+
+layout:
+  type: horizontal
+  splits:
+    - type: vertical
+      size: 65%
+      splits:
+        - id: logs
+          size: 60%
+          command: "clear && echo 'Logs pane - replace with: tail -f /var/log/app.log'"
+        - id: shell
+          size: 40%
+          command: "clear && echo 'Server shell ready'"
+    - type: vertical
+      size: 35%
+      splits:
+        - id: metrics
+          size: 50%
+          command: "clear && echo 'Metrics pane - try: top or htop'"
+        - id: alerts
+          size: 50%
+          command: "clear && echo 'Alerts pane - add your checks here'"
+
+# Result:
+# |--------------------------------------------|
+# |                         |     metrics      |
+# |          logs           |------------------|
+# |                         |      alerts      |
+# |-------------------------|------------------|
+# |          shell          |                  |
+# |--------------------------------------------|
