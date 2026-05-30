@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.5.0] – 2026-05-30
 
 ### Added
 - Added `--dry-run` to validate and preview layouts without creating tmux sessions.
