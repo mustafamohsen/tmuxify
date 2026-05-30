@@ -1,5 +1,5 @@
 # Intrusion Monitoring Layout
-# Real-time monitoring for intrusion attempts
+# Authentication logs and Fail2ban status without forcing sudo prompts
 
 session:
   name: "intrusion-monitor"
@@ -9,15 +9,16 @@ layout:
   type: horizontal
   splits:
     - id: auth_log
-      size: 50%
-      command: "tail -f /var/log/auth.log"
+      size: 60%
+      command: >-
+        sh -lc 'if [ -r /var/log/auth.log ]; then tail -F /var/log/auth.log; elif [ -r /var/log/secure ]; then tail -F /var/log/secure; else echo "No readable auth log found. Try sudo journalctl -f _COMM=sshd or set your log path."; fi'
     - id: fail2ban
-      size: 50%
-      command: "sudo fail2ban-client status"
+      size: 40%
+      command: >-
+        sh -lc 'command -v fail2ban-client >/dev/null 2>&1 && fail2ban-client status || echo "Fail2ban unavailable or needs privileges. Run manually: sudo fail2ban-client status"'
 
 # Result:
 # |------------------------------------------|
-# |                      |                   |
 # |                      |                   |
 # |       auth_log       |     fail2ban      |
 # |   (Authentication)   |   (Ban status)    |

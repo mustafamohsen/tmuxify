@@ -1,28 +1,23 @@
-# Router Configuration Layout
-# Monitor and configure network routers
+# Router Operations Layout
+# Router shell instructions plus log/source hints
 
 session:
   name: "router-config"
-  initial_focus: ssh_router
+  initial_focus: router_shell
 
 layout:
   type: vertical
   splits:
-    - id: ssh_router
+    - id: router_shell
       size: 70%
-      command: "ssh admin@192.168.1.1"
+      command: "clear && echo 'Authorized router console only. Example: ssh admin@router.example.com. Back up config before changes.'"
     - id: logs
       size: 30%
-      command: "tail -f /var/log/router.log"
+      command: "clear && echo 'Router logs: OpenWrt example: ssh admin@router.example.com logread -f; or tail your central syslog.'"
 
 # Result:
 # |------------------------------------------|
-# |                                          |
-# |               ssh_router                 |
-# |           (Router terminal)              |
-# |                                          |
+# |              router_shell                |
 # |------------------------------------------|
-# |                                          |
 # |                  logs                    |
-# |              (Router logs)               |
 # |------------------------------------------|

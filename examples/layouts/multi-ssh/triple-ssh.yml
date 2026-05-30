@@ -1,28 +1,24 @@
-# Triple SSH Connection Layout
-# Connect to three remote hosts simultaneously
+# Bastion SSH Layout
+# Three authorized hosts through a bastion/jump host
 
 session:
-  name: "multi-ssh"
-  initial_focus: host_a
+  name: "bastion-ssh"
+  initial_focus: app_a
 
 layout:
   type: horizontal
   splits:
-    - id: host_a
+    - id: app_a
       size: 33%
-      command: "ssh user@hostA"
-    - id: host_b
+      command: "ssh -o ConnectTimeout=10 -o ServerAliveInterval=30 -J bastion.example.com user@app-a.example.com"
+    - id: app_b
       size: 33%
-      command: "ssh user@hostB"
-    - id: host_c
+      command: "ssh -o ConnectTimeout=10 -o ServerAliveInterval=30 -J bastion.example.com user@app-b.example.com"
+    - id: db_host
       size: 34%
-      command: "ssh user@hostC"
+      command: "clear && echo 'Database host - read-only checks first'; ssh -o ConnectTimeout=10 -o ServerAliveInterval=30 -J bastion.example.com user@db.example.com"
 
 # Result:
 # |---------------------------------------|
-# |            |            |             |
-# |            |            |             |
-# |   host_a   |   host_b   |   host_c    |
-# |  (Host A)  |  (Host B)  |  (Host C)   |
-# |            |            |             |
+# |   app_a    |   app_b    |   db_host   |
 # |---------------------------------------|

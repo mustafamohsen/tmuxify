@@ -1,28 +1,23 @@
-# Firewall Monitoring Layout
-# Visualize and monitor firewall rules and activity
+# Firewall Review Layout
+# Read-only firewall inspection commands with manual privilege escalation
 
 session:
   name: "firewall-check"
-  initial_focus: iptables
+  initial_focus: rules
 
 layout:
   type: vertical
   splits:
-    - id: iptables
-      size: 50%
-      command: "watch -n 3 sudo iptables -L -v --line-numbers"
+    - id: rules
+      size: 60%
+      command: "clear && echo 'Firewall rules often require privileges. Run manually: sudo iptables -nvL --line-numbers or sudo nft list ruleset'"
     - id: ufw
-      size: 50%
-      command: "sudo ufw status verbose"
+      size: 40%
+      command: "clear && echo 'UFW status: run sudo ufw status verbose on hosts that use UFW.'"
 
 # Result:
 # |------------------------------------------|
-# |                                          |
-# |                iptables                  |
-# |             (IPTables rules)             |
-# |                                          |
+# |                  rules                   |
 # |------------------------------------------|
-# |                                          |
 # |                   ufw                    |
-# |              (UFW status)                |
 # |------------------------------------------|

@@ -1,5 +1,5 @@
 # Environment Comparison Layout
-# Compare three different environments side by side
+# Compare dev, staging, and production environments side by side
 
 session:
   name: "env-compare"
@@ -10,19 +10,15 @@ layout:
   splits:
     - id: dev
       size: 33%
-      command: "ssh dev-env"
+      command: "ssh -o ConnectTimeout=10 -o ServerAliveInterval=30 dev.example.com"
     - id: staging
       size: 34%
-      command: "ssh staging-env"
+      command: "ssh -o ConnectTimeout=10 -o ServerAliveInterval=30 staging.example.com"
     - id: production
       size: 33%
-      command: "ssh prod-env"
+      command: "clear && echo '*** PRODUCTION *** verify target before changes'; ssh -o ConnectTimeout=10 -o ServerAliveInterval=30 prod.example.com"
 
 # Result:
 # |---------------------------------------|
-# |            |            |             |
-# |            |            |             |
 # |    dev     |  staging   | production  |
-# |   (Dev)    | (Staging)  |   (Prod)    |
-# |            |            |             |
 # |---------------------------------------|

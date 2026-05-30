@@ -1,5 +1,5 @@
 # Network Diagnostics Layout
-# Tools for network connectivity analysis
+# Connectivity checks with packet capture disabled by default
 
 session:
   name: "net-diag"
@@ -10,24 +10,22 @@ layout:
   splits:
     - id: ping
       size: 30%
-      command: "ping google.com"
+      command: >-
+        sh -lc 'TARGET=${DIAG_HOST:-example.com}; ping -c 4 "$TARGET" || echo "Set DIAG_HOST to a host you are authorized to test."'
     - type: vertical
       size: 70%
       splits:
         - id: traceroute
           size: 50%
-          command: "traceroute google.com"
-        - id: tcpdump
+          command: >-
+            sh -lc 'TARGET=${DIAG_HOST:-example.com}; if command -v traceroute >/dev/null 2>&1; then traceroute "$TARGET"; elif command -v tracepath >/dev/null 2>&1; then tracepath "$TARGET"; else echo "Install traceroute/tracepath or set your route tool."; fi'
+        - id: packet_capture
           size: 50%
-          command: "sudo tcpdump -i any port 80 or port 443"
+          command: "clear && echo 'Packet capture disabled by default. Run manually after authorization: sudo tcpdump -i <interface> -nn -c 100 \"tcp port 80 or tcp port 443\"'"
 
 # Result:
 # |------------------------------------------|
-# |              |                           |
 # |              |         traceroute        |
-# |              |      (Route tracing)      |
 # |     ping     |---------------------------|
-# |  (Ping test) |                           |
-# |              |          tcpdump          |
-# |              |      (Packet capture)     |
+# |              |      packet_capture       |
 # |------------------------------------------|

@@ -1,5 +1,5 @@
 # Multi-VPN Monitoring Layout
-# Monitor multiple VPN endpoints simultaneously
+# Local VPN status panes with SSH hints for authorized endpoints
 
 session:
   name: "vpn-check"
@@ -10,16 +10,16 @@ layout:
   splits:
     - id: vpn1
       size: 50%
-      command: "ssh user@vpn1"
+      command: >-
+        sh -lc 'clear; command -v wg >/dev/null 2>&1 && wg show || command -v tailscale >/dev/null 2>&1 && tailscale status || echo "VPN 1: run wg show, tailscale status, or ssh user@vpn1.example.com if authorized."'
     - id: vpn2
       size: 50%
-      command: "ssh user@vpn2"
+      command: "clear && echo 'VPN 2: replace with your second VPN status command or authorized SSH endpoint.'"
 
 # Result:
 # |------------------------------------------|
 # |                      |                   |
-# |                      |                   |
 # |         vpn1         |        vpn2       |
-# |      (VPN node 1)    |    (VPN node 2)   |
+# |    (VPN status)      |    (VPN status)   |
 # |                      |                   |
 # |------------------------------------------|
