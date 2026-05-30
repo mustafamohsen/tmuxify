@@ -1,25 +1,30 @@
-# Spark Cluster Management Layout
-# Monitor and control Spark master and worker nodes
+# Spark Cluster Monitoring Layout
+# Master shell plus worker/log panes for an existing Spark cluster
 
 session:
   name: "spark-cluster"
-  initial_focus: master
+  initial_focus: master_shell
 
 layout:
   type: horizontal
   splits:
-    - id: master
+    - id: master_shell
       size: 50%
-      command: "ssh master-node && clear"
-    - id: worker
+      command: "ssh -o ConnectTimeout=10 master-node"
+    - type: vertical
       size: 50%
-      command: "ssh worker-node && clear"
+      splits:
+        - id: worker_shell
+          size: 50%
+          command: "ssh -o ConnectTimeout=10 worker-node"
+        - id: spark_logs
+          size: 50%
+          command: >-
+            sh -lc 'echo "Spark logs pane. Example after editing host/path:"; echo "ssh master-node tail -F \$SPARK_HOME/logs/*master*.out"; echo "Open Spark UI at http://master-node:8080 if available."'
 
 # Result:
 # |------------------------------------------|
-# |                      |                   |
-# |                      |                   |
-# |        master        |      worker       |
-# |    (Master node)     |   (Worker node)   |
-# |                      |                   |
+# |                      |   worker_shell    |
+# |     master_shell     |-------------------|
+# |                      |    spark_logs     |
 # |------------------------------------------|

@@ -1,5 +1,5 @@
 # Machine Learning Training Layout
-# Environment for ML code editing, training runs, and GPU monitoring
+# Code, explicit training command notes, metrics/logs, and accelerator monitoring
 
 session:
   name: "ml-training"
@@ -10,24 +10,26 @@ layout:
   splits:
     - id: code
       size: 60%
-      command: "cd ml && nvim train.py"
+      command: "sh -lc 'if [ -d ml ]; then cd ml; fi; ${EDITOR:-vi} train.py'"
     - type: vertical
       size: 40%
       splits:
         - id: run_training
-          size: 50%
-          command: "python3 train.py"
+          size: 35%
+          command: "clear && echo 'Run training intentionally, e.g. python3 train.py --config configs/default.yaml --seed 42'"
+        - id: metrics
+          size: 30%
+          command: "sh -lc 'if [ -d runs ] && command -v tensorboard >/dev/null 2>&1; then tensorboard --logdir runs --host 127.0.0.1; else echo \"Metrics pane: create runs/ or replace with your tracker command.\"; fi'"
         - id: monitor
-          size: 50%
-          command: "watch -n 2 nvidia-smi"
+          size: 35%
+          command: >-
+            sh -lc 'if command -v watch >/dev/null 2>&1 && command -v nvidia-smi >/dev/null 2>&1; then watch -n 2 nvidia-smi; elif command -v nvidia-smi >/dev/null 2>&1; then nvidia-smi; else echo "nvidia-smi not found; use htop/top, rocm-smi, or your accelerator monitor."; fi'
 
 # Result:
 # |------------------------------------------|
-# |                      |                   |
 # |                      |   run_training    |
-# |                      |   (Python run)    |
-# |        code          |-------------------|
-# |    (Code editor)     |                   |
-# |                      |     monitor       |
-# |                      |    (GPU stats)    |
+# |                      |-------------------|
+# |        code          |      metrics      |
+# |                      |-------------------|
+# |                      |      monitor      |
 # |------------------------------------------|

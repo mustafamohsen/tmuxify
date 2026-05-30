@@ -1,5 +1,5 @@
 # Jupyter Research Layout
-# Environment for Jupyter lab, Python REPL, and data file management
+# Focused notebook, REPL, and data-file workflow
 
 session:
   name: "jupyter-research"
@@ -10,7 +10,7 @@ layout:
   splits:
     - id: jupyter
       size: 70%
-      command: "jupyter lab"
+      command: "python3 -m jupyter lab --no-browser"
     - type: horizontal
       size: 30%
       splits:
@@ -19,17 +19,11 @@ layout:
           command: "python3"
         - id: data_files
           size: 50%
-          command: "ls -lh data/"
+          command: "sh -lc 'python3 --version; command -v python3; if [ -d data ]; then ls -lh data; else echo \"No data/ directory; edit this pane to your dataset path.\"; fi'"
 
 # Result:
 # |------------------------------------------|
-# |                                          |
-# |                                          |
 # |                 jupyter                  |
-# |              (Jupyter Lab)               |
-# |                                          |
 # |------------------------------------------|
-# |                      |                   |
 # |     python_repl      |    data_files     |
-# |      (Python)        |  (Data directory) |
 # |------------------------------------------|
