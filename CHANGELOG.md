@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.5.1] – 2026-05-30
+
+### Changed
+- Refined all bundled layout examples with persona-driven feedback from developer, SRE, security, network, data, QA, and streaming workflows.
+- Reorganized the examples guide by audience, trust model, readiness level, and contribution standards.
+
+### Fixed
+- Removed auto-running risky example commands such as privileged packet capture, vulnerability scans, common-router SSH, and forced sudo firewall checks.
+- Replaced placeholder-heavy examples with safer, more realistic commands, environment-variable guidance, and portable fallbacks.
+
 ## [2.5.0] – 2026-05-30
 
 ### Added

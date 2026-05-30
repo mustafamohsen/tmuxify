@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION=$(cat "$(dirname "$0")/VERSION" 2>/dev/null || echo "2.5.0")
+VERSION=$(cat "$(dirname "$0")/VERSION" 2>/dev/null || echo "2.5.1")
 REPO_URL="https://raw.githubusercontent.com/mustafamohsen/tmuxify/main/tmuxify"
 
 CUSTOM_CONFIG=""
