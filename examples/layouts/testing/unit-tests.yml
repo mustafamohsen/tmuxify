@@ -1,5 +1,5 @@
 # Unit Testing Layout
-# Environment for test-driven development
+# Focused test-driven development loop
 
 session:
   name: "unit-tests"
@@ -10,20 +10,15 @@ layout:
   splits:
     - id: editor
       size: 70%
-      command: "nvim ."
+      command: "sh -lc '${EDITOR:-vi} .'"
     - id: run_tests
       size: 30%
-      command: "npm test -- --watch"
+      command: >-
+        sh -lc 'npm test -- --watch || pytest -q || go test ./... || echo "Replace with your watcher: vitest --watch, cargo watch -x test, etc."'
 
 # Result:
 # |------------------------------------------|
-# |                                          |
-# |                                          |
 # |                 editor                   |
-# |             (Code editor)                |
-# |                                          |
 # |------------------------------------------|
-# |                                          |
 # |               run_tests                  |
-# |             (Test runner)                |
 # |------------------------------------------|

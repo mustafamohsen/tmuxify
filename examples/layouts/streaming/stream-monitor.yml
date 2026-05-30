@@ -1,5 +1,5 @@
 # Stream Monitoring Layout
-# Monitor stream chat, logs, and controls
+# Chat, encoder logs, and manual OBS/ops notes
 
 session:
   name: "stream-monitor"
@@ -9,25 +9,22 @@ layout:
   type: horizontal
   splits:
     - id: chat
-      size: 40%
-      command: "echo 'Twitch Chat TUI'"
+      size: 50%
+      command: "clear && echo 'Chat pane: run twitch-tui/chatuino/weechat, or your YouTube chat client.'"
     - type: vertical
-      size: 60%
+      size: 50%
       splits:
         - id: ffmpeg_log
-          size: 50%
-          command: "tail -f /tmp/ffmpeg_stream.log"
-        - id: obs_cmd
-          size: 50%
-          command: "echo 'Control OBS or other streaming software here'"
+          size: 55%
+          command: >-
+            sh -lc 'LOG=${FFMPEG_LOG:-./ffmpeg-stream.log}; [ -r "$LOG" ] && tail -F "$LOG" || echo "Set FFMPEG_LOG to your encoder log path."'
+        - id: obs_status
+          size: 45%
+          command: "clear && echo 'OBS controls are manual by design. Suggested read-only checks: obs-cli status; obs-cli scene list; obs-cli stream status.'"
 
 # Result:
 # |------------------------------------------|
-# |                |                         |
 # |                |        ffmpeg_log       |
-# |                |      (Stream logs)      |
 # |      chat      |-------------------------|
-# |  (Chat client) |                         |
-# |                |         obs_cmd         |
-# |                |    (OBS controls)       |
+# |                |        obs_status       |
 # |------------------------------------------|

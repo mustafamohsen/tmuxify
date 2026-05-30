@@ -1,5 +1,5 @@
 # Multi-Platform Chat Layout
-# Monitor chats from multiple streaming platforms
+# Monitor primary and secondary chat/relay sources
 
 session:
   name: "multi-chat"
@@ -9,20 +9,22 @@ layout:
   type: horizontal
   splits:
     - id: twitch
-      size: 33%
-      command: "echo 'Twitch Chat Pane'"
-    - id: youtube
-      size: 34%
-      command: "echo 'YouTube Chat Pane'"
-    - id: discord
-      size: 33%
-      command: "echo 'Discord/IRC Chat Pane'"
+      size: 50%
+      command: "clear && echo 'Twitch chat: set TWITCH_CHANNEL and run twitch-tui/chatuino/weechat here.'"
+    - type: vertical
+      size: 50%
+      splits:
+        - id: youtube
+          size: 50%
+          command: "clear && echo 'YouTube live chat: set YOUTUBE_LIVE_URL and use your chat downloader/client here.'"
+        - id: discord_relay
+          size: 50%
+          command: >-
+            sh -lc 'LOG=${DISCORD_RELAY_LOG:-}; [ -n "$LOG" ] && [ -r "$LOG" ] && tail -F "$LOG" || echo "Discord relay: set DISCORD_RELAY_LOG to a local relay log."'
 
 # Result:
 # |---------------------------------------|
-# |            |            |             |
-# |            |            |             |
-# |   twitch   |  youtube   |   discord   |
-# |  (Twitch)  | (YouTube)  |  (Discord)  |
-# |            |            |             |
+# |                  |      youtube       |
+# |     twitch       |--------------------|
+# |                  |   discord_relay    |
 # |---------------------------------------|

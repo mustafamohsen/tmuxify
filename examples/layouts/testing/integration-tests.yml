@@ -1,25 +1,24 @@
 # Integration Testing Layout
-# Environment for running and monitoring integration tests
+# Runner plus service/log visibility for integration test sessions
 
 session:
   name: "integration-tests"
-  initial_focus: console
+  initial_focus: runner
 
 layout:
   type: horizontal
   splits:
-    - id: console
+    - id: runner
       size: 50%
-      command: "echo 'Run integration tests here (e.g., npm run integration)'"
+      command: "clear && echo 'Run integration tests here: npm run test:integration, pytest tests/integration, go test ./integration/...'"
     - id: logs
       size: 50%
-      command: "tail -f integration.log"
+      command: "sh -lc 'mkdir -p logs && touch logs/integration.log && tail -F logs/integration.log'"
 
 # Result:
 # |------------------------------------------|
 # |                      |                   |
-# |                      |                   |
-# |        console       |       logs        |
+# |        runner        |       logs        |
 # |    (Test runner)     |   (Test logs)     |
 # |                      |                   |
 # |------------------------------------------|

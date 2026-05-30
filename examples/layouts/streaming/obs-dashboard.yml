@@ -1,5 +1,5 @@
 # OBS Streaming Dashboard Layout
-# Monitor and control OBS streaming software
+# Read-only OBS/log/chat/status workspace
 
 session:
   name: "obs-dashboard"
@@ -10,25 +10,24 @@ layout:
   splits:
     - id: obs_log
       size: 30%
-      command: "tail -f ~/.config/obs-studio/logs/obs.log"
+      command: >-
+        sh -lc 'LOG=${OBS_LOG_FILE:-}; [ -n "$LOG" ] && [ -r "$LOG" ] && tail -F "$LOG" || echo "Set OBS_LOG_FILE to your current OBS log, e.g. ~/.config/obs-studio/logs/<latest>.txt"'
     - type: horizontal
       size: 70%
       splits:
         - id: chat
-          size: 50%
-          command: "echo 'Chat client here (TUI for Twitch or YT)'"
+          size: 40%
+          command: "clear && echo 'Chat pane: set TWITCH_CHANNEL/YOUTUBE_LIVE_URL and run your chat client here.'"
+        - id: obs_status
+          size: 30%
+          command: "sh -lc 'command -v obs-cli >/dev/null 2>&1 && obs-cli status || echo \"Optional: configure obs-cli for read-only OBS status. Do not store WebSocket secrets in YAML.\"'"
         - id: system_stats
-          size: 50%
-          command: "htop"
+          size: 30%
+          command: "sh -lc 'command -v htop >/dev/null 2>&1 && exec htop || exec top'"
 
 # Result:
 # |------------------------------------------|
-# |                                          |
 # |                 obs_log                  |
-# |                (OBS logs)                |
 # |------------------------------------------|
-# |                      |                   |
-# |         chat         |   system_stats    |
-# |    (Chat client)     |   (System load)   |
-# |                      |                   |
+# |      chat      | obs_status | system     |
 # |------------------------------------------|
