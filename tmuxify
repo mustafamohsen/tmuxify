@@ -120,9 +120,13 @@ safe_update() {
     *) rm -rf "$temp_dir"; die "Downloaded file does not look executable. Update aborted." ;;
   esac
 
+  if ! grep -q '^#!/' "$temp_file" || ! grep -q '^VERSION=' "$temp_file"; then
+    rm -rf "$temp_dir"
+    die "Downloaded candidate failed static validation."
+  fi
   chmod +x "$temp_file" || { rm -rf "$temp_dir"; die "Failed to mark downloaded candidate executable."; }
-  candidate_version=$($temp_file --version 2>/dev/null | awk '{print $3}') || candidate_version=""
-  [ -n "$candidate_version" ] || { rm -rf "$temp_dir"; die "Downloaded candidate failed version check."; }
+  candidate_version=$(sed -n 's/.*echo "\([0-9][0-9.]*\)".*/\1/p' "$temp_file" | head -n 1)
+  [ -n "$candidate_version" ] || candidate_version="unknown"
 
   SCRIPT_PATH=$(command -v "$0" 2>/dev/null || printf '%s' "$0")
   INSTALL_DIR=$(dirname "$SCRIPT_PATH")
