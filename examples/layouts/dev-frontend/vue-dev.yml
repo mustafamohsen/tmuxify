@@ -1,5 +1,5 @@
-# Vue.js Development Layout
-# Complete environment for Vue.js frontend development
+# Vue Development Layout
+# Modern Vue/Vite workflow with dev server and tests
 
 session:
   name: "vue-dev"
@@ -9,25 +9,28 @@ layout:
   type: horizontal
   splits:
     - id: editor
-      size: 70%
-      command: "cd vue-app && nvim ."
+      size: 60%
+      command: "sh -lc '${EDITOR:-vi} .'"
     - type: vertical
-      size: 30%
+      size: 40%
       splits:
         - id: dev_server
-          size: 50%
-          command: "cd vue-app && npm run serve"
+          size: 45%
+          command: >-
+            sh -lc 'npm run dev || npm run serve || echo "No Vue dev/serve script found."'
+        - id: tests
+          size: 35%
+          command: >-
+            sh -lc 'npm test -- --watch || npm run test:unit -- --watch || echo "Replace with your Vue test command."'
         - id: terminal
-          size: 50%
-          command: "clear && echo 'Vue dev environment ready'"
+          size: 20%
+          command: "clear && echo 'Vue shell ready'"
 
 # Result:
 # |------------------------------------------|
-# |                      |                   |
 # |                      |    dev_server     |
-# |                      |   (Vue server)    |
-# |        editor        |-------------------|
-# |    (Code editor)     |                   |
+# |                      |-------------------|
+# |        editor        |       tests       |
+# |                      |-------------------|
 # |                      |     terminal      |
-# |                      |    (Commands)     |
 # |------------------------------------------|

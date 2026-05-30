@@ -1,42 +1,37 @@
 # Classic 4-Pane Layout
-# The original Tmuxify layout with editor, assistant, git, and terminal
+# Editor, assistant/scratch pane, Git, and terminal
 
 session:
-  name: null  # Auto-generate from folder path
-  initial_focus: editor  # Focus this pane when session starts
+  name: null
+  initial_focus: editor
 
 layout:
-  type: horizontal  # First split horizontally (side by side)
+  type: horizontal
   splits:
-    # Left side - editor
     - id: editor
-      size: 50%
-      command: "nvim ."
-    
-    # Right side - complex layout
-    - type: vertical  # Split vertically (top/bottom)
-      size: 50%
+      size: 60%
+      command: "sh -lc '${EDITOR:-vi} .'"
+    - type: vertical
+      size: 40%
       splits:
-        # Top right
         - id: assistant
-          size: 50%
-          command: "aider"
-        
-        # Bottom right - split horizontally
+          size: 45%
+          command: "clear && echo 'Assistant/scratch pane. Run aider, claude, or notes here when ready.'"
         - type: horizontal
-          size: 50%
+          size: 55%
           splits:
             - id: git
               size: 50%
-              command: "lazygit"
+              command: >-
+                sh -lc 'command -v lazygit >/dev/null 2>&1 && exec lazygit || { git status --short; echo; echo "Install lazygit for an interactive Git TUI."; }'
             - id: terminal
               size: 50%
-              command: "clear"
+              command: "clear && pwd"
 
 # Result:
 # |------------------------------------------------|
-# |                   |         assistant          |
-# |                   |----------------------------|
-# |      editor       |     git     |   terminal   |
-# |                   |             |              |
+# |                       |       assistant        |
+# |                       |------------------------|
+# |        editor         |    git    | terminal   |
+# |                       |           |            |
 # |------------------------------------------------|

@@ -1,51 +1,45 @@
-# Asymmetric Layout
-# A complex asymmetric arrangement for specialized workflows
+# Asymmetric Layout Demo
+# Demonstrates uneven nesting while keeping workflow-oriented pane names
 
 session:
-  name: "complex"
-  initial_focus: main
+  name: "asymmetric-demo"
+  initial_focus: editor
 
 layout:
   type: horizontal
   splits:
-    - id: main
-      size: 40%
-      command: "nvim ."
+    - id: editor
+      size: 45%
+      command: "sh -lc '${EDITOR:-vi} .'"
     - type: vertical
-      size: 35%
+      size: 30%
       splits:
-        - id: top_middle
+        - id: notes
           size: 30%
-          command: "clear && echo 'Top Middle'"
+          command: "clear && echo 'Notes / docs pane'"
         - type: horizontal
           size: 70%
           splits:
-            - id: middle_left
+            - id: repl
               size: 50%
-              command: "clear && echo 'Middle Left'"
-            - id: middle_right
+              command: "clear && echo 'REPL / scratch pane'"
+            - id: tests
               size: 50%
-              command: "clear && echo 'Middle Right'"
+              command: "clear && echo 'Tests pane'"
     - type: vertical
       size: 25%
       splits:
-        - id: top_right
-          size: 70%
-          command: "clear && echo 'Top Right'"
-        - id: bottom_right
-          size: 30%
-          command: "clear && echo 'Bottom Right'"
+        - id: logs
+          size: 65%
+          command: "clear && echo 'Logs pane'"
+        - id: terminal
+          size: 35%
+          command: "clear && pwd"
 
 # Result:
 # |-----------------------------------------------------------|
-# |                  |                    |                    |
-# |                  |   top_middle       |                    |
-# |                  |--------------------|                    |
-# |                  |          |         |                    |
-# |       main       | middle_  | middle_ |    top_right       |
-# |                  |  left    | right   |                    |
-# |                  |          |         |                    |
-# |                  |          |         |--------------------|
-# |                  |          |         |                    |
-# |                  |          |         |   bottom_right     |
+# |                  |      notes       |        logs         |
+# |                  |------------------|                     |
+# |      editor      |   repl  | tests  |---------------------|
+# |                  |         |        |      terminal       |
 # |-----------------------------------------------------------|

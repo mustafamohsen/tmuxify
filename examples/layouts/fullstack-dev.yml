@@ -1,39 +1,42 @@
 # Fullstack Development Layout
-# Three columns: Backend, Frontend, and Terminal/Server logs
+# One editor with backend/frontend servers and test/ops panes
 
 session:
   name: "fullstack"
-  initial_focus: backend
+  initial_focus: editor
 
 layout:
   type: horizontal
   splits:
-    - id: backend
-      size: 33%
-      command: "cd backend && nvim ."
-    - id: frontend
-      size: 33%
-      command: "cd frontend && nvim ."
+    - id: editor
+      size: 60%
+      command: "sh -lc '${EDITOR:-vi} .'"
     - type: vertical
-      size: 34%
+      size: 40%
       splits:
-        - id: terminal
-          size: 30%
-          command: "clear"
         - id: backend_server
-          size: 35%
-          command: "cd backend && echo 'Ready to start backend server'"
+          size: 30%
+          command: >-
+            sh -lc 'if [ -d backend ]; then cd backend && npm run dev; else echo "No backend/ directory. Replace this with your API command."; fi'
         - id: frontend_server
-          size: 35%
-          command: "cd frontend && echo 'Ready to start frontend server'"
+          size: 30%
+          command: >-
+            sh -lc 'if [ -d frontend ]; then cd frontend && npm run dev; else echo "No frontend/ directory. Replace this with your web command."; fi'
+        - id: tests
+          size: 25%
+          command: >-
+            sh -lc 'if [ -d backend ]; then cd backend && npm test -- --watch; else echo "Tests pane: run npm test, pytest, go test, etc."; fi'
+        - id: terminal
+          size: 15%
+          command: "clear && pwd && echo 'Fullstack shell ready'"
 
 # Result:
 # |--------------------------------------------------|
-# |               |                |                  |
-# |               |                |    terminal      |
-# |               |                |------------------|
-# |    backend    |    frontend    |  backend_server  |
-# |               |                |------------------|
-# |               |                | frontend_server  |
-# |               |                |                  |
+# |                            |   backend_server    |
+# |                            |---------------------|
+# |                            |   frontend_server   |
+# |           editor           |---------------------|
+# |                            |        tests        |
+# |                            |---------------------|
+# |                            |       terminal      |
 # |--------------------------------------------------|

@@ -1,45 +1,41 @@
-# 6-Pane Grid Layout
-# A 2x3 grid layout for various tools
+# 6-Pane Workbench Demo
+# A 2x3 geometry demo with workflow-oriented pane names
 
 session:
-  name: "grid"
-  initial_focus: pane1
+  name: "grid-demo"
+  initial_focus: editor
 
 layout:
   type: vertical
   splits:
-    - type: horizontal  # Top row
+    - type: horizontal
       size: 50%
       splits:
-        - id: pane1
-          size: 33%
-          command: "clear && echo 'Pane 1'"
-        - id: pane2
-          size: 33%
-          command: "clear && echo 'Pane 2'"
-        - id: pane3
-          size: 34%
-          command: "clear && echo 'Pane 3'"
-    - type: horizontal  # Bottom row
+        - id: editor
+          size: 40%
+          command: "sh -lc '${EDITOR:-vi} .'"
+        - id: server
+          size: 30%
+          command: "clear && echo 'Server pane: run your dev server here.'"
+        - id: tests
+          size: 30%
+          command: "clear && echo 'Tests pane: run your watcher here.'"
+    - type: horizontal
       size: 50%
       splits:
-        - id: pane4
+        - id: git
           size: 33%
-          command: "clear && echo 'Pane 4'"
-        - id: pane5
+          command: "git status --short"
+        - id: logs
           size: 33%
-          command: "clear && echo 'Pane 5'"
-        - id: pane6
+          command: "clear && echo 'Logs pane: tail -F your app logs here.'"
+        - id: terminal
           size: 34%
-          command: "clear && echo 'Pane 6'"
+          command: "clear && pwd"
 
 # Result:
 # |-----------------------------------------------|
-# |             |             |                   |
-# |    pane1    |    pane2    |      pane3       |
-# |             |             |                   |
+# |      editor      |    server    |    tests    |
 # |-----------------------------------------------|
-# |             |             |                   |
-# |    pane4    |    pane5    |      pane6       |
-# |             |             |                   |
+# |       git        |     logs     |  terminal   |
 # |-----------------------------------------------|

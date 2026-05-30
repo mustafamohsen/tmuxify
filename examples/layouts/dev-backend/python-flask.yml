@@ -1,5 +1,5 @@
 # Flask Backend Development Layout
-# Setup for Python Flask development with testing
+# Editor with Flask server and pytest panes
 
 session:
   name: "flask-backend"
@@ -10,24 +10,20 @@ layout:
   splits:
     - id: editor
       size: 60%
-      command: "cd flask-app && vim app.py"
+      command: "sh -lc '${EDITOR:-vi} .'"
     - type: vertical
       size: 40%
       splits:
         - id: run_server
           size: 50%
-          command: "export FLASK_APP=app.py && flask run --reload"
+          command: "python -m flask --app app run --debug"
         - id: tests
           size: 50%
-          command: "pytest --maxfail=1 --disable-warnings"
+          command: "python -m pytest -q --maxfail=1 --disable-warnings"
 
 # Result:
 # |------------------------------------------|
-# |                      |                   |
 # |                      |   run_server      |
-# |                      |   (Flask app)     |
 # |        editor        |-------------------|
-# |    (Code editor)     |                   |
 # |                      |      tests        |
-# |                      |   (Test runner)   |
 # |------------------------------------------|

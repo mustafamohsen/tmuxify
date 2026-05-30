@@ -1,5 +1,5 @@
 # Go Backend Development Layout
-# Complete environment for Go backend development
+# Editor with run and test panes for a Go module
 
 session:
   name: "go-backend"
@@ -9,25 +9,21 @@ layout:
   type: horizontal
   splits:
     - id: editor
-      size: 70%
-      command: "cd go-backend && nvim ."
+      size: 65%
+      command: "sh -lc '${EDITOR:-vi} .'"
     - type: vertical
-      size: 30%
+      size: 35%
       splits:
         - id: run_app
           size: 50%
-          command: "go run main.go"
+          command: "sh -lc 'go run . || echo \"Replace with your Go entrypoint, e.g. go run ./cmd/api\"'"
         - id: test_app
           size: 50%
           command: "go test ./... -v"
 
 # Result:
 # |------------------------------------------|
-# |                      |                   |
 # |                      |     run_app       |
-# |                      |   (Go server)     |
 # |        editor        |-------------------|
-# |    (Code editor)     |                   |
 # |                      |     test_app      |
-# |                      |    (Go tests)     |
 # |------------------------------------------|

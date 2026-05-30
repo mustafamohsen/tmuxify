@@ -1,120 +1,81 @@
-# Nested Development Environment
-# A complex multi-level nested layout for advanced development workflows
+# Nested Layout Demo
+# A deep tmuxify schema demo for advanced development dashboards
 
 session:
-  name: "nested-dev"
+  name: "nested-demo"
   initial_focus: main_editor
 
 layout:
   type: vertical
   splits:
-    # Top bar with project status tools
     - type: horizontal
-      size: 15%
+      size: 12%
       splits:
         - id: project_overview
-          size: 25%
-          command: "echo 'Project Overview' && ls -la"
+          size: 30%
+          command: "pwd && git status --short"
         - id: git_status
-          size: 25%
+          size: 30%
           command: "git status"
-        - id: system_monitor
-          size: 25%
-          command: "echo 'System Resources' && uptime"
+        - id: system_summary
+          size: 20%
+          command: "uptime"
         - id: clock
-          size: 25%
-          command: "watch -n 1 date"
-    
-    # Main development area
+          size: 20%
+          command: "date"
     - type: horizontal
-      size: 70%
+      size: 73%
       splits:
-        # Left editor column
         - type: vertical
           size: 60%
           splits:
             - id: main_editor
               size: 70%
-              command: "nvim ."
+              command: "sh -lc '${EDITOR:-vi} .'"
             - id: terminal
               size: 30%
-              command: "clear && echo 'Ready for commands'"
-        
-        # Right side tools
+              command: "clear && pwd && echo 'Ready for commands'"
         - type: vertical
           size: 40%
           splits:
-            # Top-right documentation
             - id: docs
-              size: 30%
-              command: "echo 'Documentation Area'"
-            
-            # Middle-right testing area
+              size: 25%
+              command: "clear && echo 'Docs pane: run your docs server or notes here.'"
             - type: horizontal
-              size: 40%
+              size: 45%
               splits:
                 - id: test_runner
                   size: 50%
-                  command: "echo 'Test Runner Ready'"
+                  command: "clear && echo 'Run tests here, e.g. npm test -- --watch / pytest / go test ./...'"
                 - type: vertical
                   size: 50%
                   splits:
                     - id: test_output
                       size: 50%
-                      command: "echo 'Test Output'"
+                      command: "clear && echo 'Test output / failures pane'"
                     - id: coverage
                       size: 50%
-                      command: "echo 'Test Coverage'"
-            
-            # Bottom-right logs and debugging
+                      command: "clear && echo 'Coverage pane: open coverage summary here.'"
             - type: horizontal
               size: 30%
               splits:
                 - id: logs
                   size: 50%
-                  command: "echo 'Application Logs'"
+                  command: "clear && echo 'Logs pane: tail -F ./logs/app.log'"
                 - id: debug
                   size: 50%
-                  command: "echo 'Debug Console'"
-    
-    # Bottom bar with command tools
+                  command: "clear && echo 'Debug / REPL pane'"
     - type: horizontal
       size: 15%
       splits:
         - id: server
           size: 33%
-          command: "echo 'Server: Ready to start'"
+          command: "clear && echo 'Server pane: run your local service here.'"
         - id: database
           size: 33%
-          command: "echo 'Database CLI'"
+          command: "clear && echo 'Database CLI pane: psql/mysql/sqlite/etc.'"
         - id: tasks
           size: 34%
-          command: "echo 'Task Runner'"
+          command: "clear && echo 'Task runner pane: make, just, npm scripts, etc.'"
 
-# Result:
-# |-----------------------------------------------------------------------|
-# | project |    git    |   system   |            clock                   |
-# | overview|   status  |   monitor  |                                    |
-# |-----------------------------------------------------------------------|
-# |                           |                |                          |
-# |                           |                |                          |
-# |                           |                |                          |
-# |                           |     docs       |                          |
-# |                           |                |                          |
-# |                           |----------------|--------------------------|
-# |                           |                |            |             |
-# |      main_editor          | test_runner    | test_output| coverage    |
-# |                           |                |            |             |
-# |                           |                |            |             |
-# |                           |----------------|--------------------------|
-# |                           |                |                          |
-# |                           |     logs       |     debug                |
-# |---------------------------|                |                          |
-# |                           |                |                          |
-# |       terminal            |                |                          |
-# |                           |                |                          |
-# |-----------------------------------------------------------------------|
-# |                  |                  |                                 |
-# |      server      |    database      |            tasks                |
-# |                  |                  |                                 |
-# |-----------------------------------------------------------------------|
+# Result: deep nested demo with status, editor, tests, logs, and task panes.

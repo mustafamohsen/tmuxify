@@ -1,8 +1,8 @@
 # Basic 3-Pane Layout
-# Editor with terminal and git interface
+# Editor with Git status/TUI and a working shell
 
 session:
-  name: "dev3"
+  name: null
   initial_focus: editor
 
 layout:
@@ -10,16 +10,17 @@ layout:
   splits:
     - id: editor
       size: 60%
-      command: "nvim ."
+      command: "sh -lc '${EDITOR:-vi} .'"
     - type: vertical
       size: 40%
       splits:
         - id: git
-          size: 40%  # 40% of right side height
-          command: "lazygit"
+          size: 40%
+          command: >-
+            sh -lc 'command -v lazygit >/dev/null 2>&1 && exec lazygit || { git status --short; echo; echo "Install lazygit for an interactive Git TUI."; }'
         - id: terminal
-          size: 60%  # 60% of right side height
-          command: "clear && echo '✓ Ready'"
+          size: 60%
+          command: "clear && pwd && echo 'Ready'"
 
 # Result:
 # |---------------------------------|

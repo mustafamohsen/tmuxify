@@ -1,5 +1,5 @@
 # General Frontend Development Layout
-# Code editor, build watcher, and browser sync setup
+# Editor, dev server, tests, and a browser hint pane
 
 session:
   name: "frontend"
@@ -9,25 +9,28 @@ layout:
   type: horizontal
   splits:
     - id: editor
-      size: 65%
-      command: "cd app && code ."
+      size: 60%
+      command: "sh -lc '${EDITOR:-vi} .'"
     - type: vertical
-      size: 35%
+      size: 40%
       splits:
-        - id: watch_build
-          size: 50%
-          command: "npm run watch"
-        - id: browser_sync
-          size: 50%
-          command: "browser-sync start --server 'app' --files 'app'"
+        - id: dev_server
+          size: 45%
+          command: >-
+            sh -lc 'npm run dev || npm start || echo "Replace with your frontend dev-server command."'
+        - id: tests
+          size: 35%
+          command: >-
+            sh -lc 'npm test -- --watch || echo "Replace with your test watcher, e.g. vitest --watch."'
+        - id: browser
+          size: 20%
+          command: "clear && echo 'Open the local URL printed by the dev server, often http://localhost:5173 or http://localhost:3000'"
 
 # Result:
 # |------------------------------------------|
-# |                      |                   |
-# |                      |   watch_build     |
-# |                      |   (Build watch)   |
-# |        editor        |-------------------|
-# |    (Code editor)     |                   |
-# |                      |   browser_sync    |
-# |                      |   (Live reload)   |
+# |                      |    dev_server     |
+# |                      |-------------------|
+# |        editor        |       tests       |
+# |                      |-------------------|
+# |                      |      browser      |
 # |------------------------------------------|
