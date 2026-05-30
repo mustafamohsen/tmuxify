@@ -2,79 +2,111 @@
 
 **Instantly launch customized tmux workspaces using simple YAML configuration.**
 
-Tmuxify automates the creation and management of tmux sessions with complex layouts defined declaratively, adapting to your project context with or without configuration.
+Tmuxify turns a small layout file into a ready-to-use tmux session. It is designed for trusted developer workspaces: one command should create the panes, focus the right place, and run the commands you normally type by hand.
 
 ## Features
 
-- **Declarative Layouts:** Define complex, nested pane structures with intuitive YAML
-- **Smart Session Management:** Auto-generates session names and seamlessly attaches to existing sessions
-- **Flexible Sizing:** Uses percentage-based pane dimensions that adapt to window resizing
-- **Custom Commands:** Specify initial commands for each pane on creation
-- **Zero Config Option:** Provides sensible default layout if no configuration exists
-- **CLI Flexibility:** Override layouts with command-line options
-- **Self-Updating:** Built-in command to fetch the latest version
+- **Declarative layouts:** Define nested pane structures with intuitive YAML.
+- **Smart session management:** Reattach to an existing session or create a new one from the current directory.
+- **Zero-config default:** Run `tmuxify` in any directory to get a useful four-pane workspace.
+- **Initial focus:** Start in the pane you care about most.
+- **Safe preview:** Use `--dry-run` to validate and inspect a layout without touching tmux.
+- **Command control:** Use `--no-commands` when you want panes created without running layout commands.
+- **Detached mode:** Use `--detach` for scripts, CI, or remote setup flows.
+
+## Requirements
+
+- Bash 3.2 or newer
+- [tmux](https://github.com/tmux/tmux) 2.1 or newer
+- [Mike Farah yq](https://github.com/mikefarah/yq) v4+
 
 ## Installation
 
-**Prerequisites:**
-- [tmux](https://github.com/tmux/tmux)
-- [yq](https://github.com/mikefarah/yq) (v4+)
+Prefer installing a reviewed release/tag into a user-owned directory:
 
-**Install to /usr/local/bin (requires sudo):**
 ```bash
-sudo curl -fsSL https://raw.githubusercontent.com/mustafamohsen/tmuxify/main/tmuxify \
-  -o /usr/local/bin/tmuxify && sudo chmod +x /usr/local/bin/tmuxify
+mkdir -p ~/bin
+curl -fsSL https://raw.githubusercontent.com/mustafamohsen/tmuxify/main/tmuxify -o ~/bin/tmuxify
+chmod +x ~/bin/tmuxify
 ```
 
-**Install to ~/bin (no sudo required):**
-```bash
-curl -fsSL https://raw.githubusercontent.com/mustafamohsen/tmuxify/main/tmuxify \
-  -o ~/bin/tmuxify && chmod +x ~/bin/tmuxify
-```
+Make sure `~/bin` is on your `PATH`.
+
+System-wide installs are fine when managed by an admin or package manager, but avoid piping mutable scripts directly into `sudo`. Tmuxify's built-in updater no longer escalates with sudo automatically.
 
 **Update:**
+
 ```bash
 tmuxify --update
 ```
 
+The updater downloads to a temporary file, checks that the candidate is executable and can report a version, backs up the current script, and replaces it only if the install path is writable.
+
 ## Usage
 
 Navigate to your project directory and run:
+
 ```bash
 tmuxify
 ```
 
-**Configuration Priority:**
-1. **`--file <path>`:** Uses the specified YAML file
-2. **`.tmuxify.yml`:** Uses the configuration file in the current directory
-3. **Default Layout:** Creates a standard 4-pane layout if no config exists
+Configuration priority:
 
-## Command-Line Options
+1. `--file <path>` uses the specified YAML file.
+2. `.tmuxify.yml` in the current directory.
+3. Built-in default four-pane layout when no config exists.
 
-| Option           | Alias | Description                                                        |
-|------------------|-------|--------------------------------------------------------------------|
-| `--version`      | `-v`  | Show Tmuxify version                                               |
-| `--update`       | `-u`  | Download and install the latest version                            |
-| `--help`         | `-h`  | Display usage instructions                                         |
-| `--list`         | `-l`  | List all active tmux sessions                                      |
-| `--file FILE`    | `-f`  | Use a specific layout file                                         |
-| `--export [FILE]`| `-e`  | Export current tmux session layout to YAML (simplified representation) |
+## Command-line options
 
-## Layout Configuration
+| Option | Alias | Description |
+|---|---:|---|
+| `--version` | `-v` | Show Tmuxify version. |
+| `--update` | `-u` | Download and install the latest version safely. |
+| `--help` | `-h` | Display usage instructions. |
+| `--list` | `-l` | List active tmux sessions. |
+| `--file FILE` | `-f` | Use a specific layout file. |
+| `--export [FILE]` | `-e` | Export current tmux session layout to a simplified YAML template. |
+| `--dry-run` | | Validate and preview the selected layout without creating a tmux session. |
+| `--detach` | | Create the tmux session without attaching/switching to it. |
+| `--no-commands` | | Create panes but do not run configured pane commands. |
+
+Useful safe workflow:
+
+```bash
+tmuxify --dry-run                  # inspect the selected layout
+tmuxify --no-commands              # create panes without running commands
+tmuxify                            # normal trusted-project flow
+```
+
+## Security and trust model
+
+A layout file can contain pane `command` entries. Tmuxify sends those commands to tmux panes as if you typed them.
+
+That is the feature, but it also means:
+
+- Treat `.tmuxify.yml` like executable project code.
+- Use `tmuxify --dry-run` before running layouts from unfamiliar repositories.
+- Use `tmuxify --no-commands` when you only want the pane structure.
+- Do not store secrets directly in layout files.
+- Do not run tmuxify with elevated privileges.
+
+Tmuxify intentionally avoids interactive trust prompts by default so the normal trusted-project UX remains one command.
+
+## Layout configuration
 
 Define layouts in YAML using a nested tree structure:
 
 ```yaml
 session:
-  name: my-project            # Optional: Uses directory name if omitted
-  initial_focus: editor       # Optional: Focus this pane on startup
+  name: my-project            # Optional: uses directory name if omitted
+  initial_focus: editor       # Optional: focus this pane on startup
 
 layout:
-  type: horizontal            # horizontal (side-by-side) or vertical (top/bottom)
+  type: horizontal            # horizontal = side-by-side, vertical = top/bottom
   splits:
-    - id: editor              # Unique identifier for this pane
-      size: 60%               # Percentage of available space
-      command: "nvim ."       # Command to run in this pane
+    - id: editor              # Unique pane identifier
+      size: 60%               # Optional percentage, 1% through 100%
+      command: "nvim ."       # Optional command to run in this pane
     - type: vertical          # Nested layout section
       size: 40%
       splits:
@@ -82,12 +114,12 @@ layout:
           size: 50%
           command: "npm test -- --watch"
         - id: terminal
-          # Size omitted: takes remaining space
           command: "clear"
 ```
 
 This creates:
-```
+
+```text
 |--------------------------------------|
 |                    |      tests      |
 |                    |-----------------|
@@ -97,46 +129,57 @@ This creates:
 |--------------------------------------|
 ```
 
-## Example Layouts
+### Schema rules
+
+Tmuxify validates the layout before creating a session:
+
+- `layout` must be an object.
+- Every layout node needs `type: horizontal` or `type: vertical`.
+- Every layout node needs a non-empty `splits` array.
+- Pane IDs are optional, but when present they must be unique and use letters, numbers, underscores, or dashes, starting with a letter.
+- `session.initial_focus`, when present, must match a pane ID.
+- `size`, when present, must be `1%` through `100%`.
+- `command`, when present, must be a string.
+
+## Example layouts
 
 Explore `examples/layouts/` for pre-built configurations organized by use case.
 
-**Use an example directly:**
+Use an example directly:
+
 ```bash
+tmuxify --dry-run --file examples/layouts/golang-dev.yml
 tmuxify --file examples/layouts/golang-dev.yml
 ```
 
-You can learn more about creating your own custom layouts using [this guide](https://github.com/mustafamohsen/tmuxify/wiki/Layout-System-Basics). We also encourage you to [contribute your own useful layouts](#layout-contributions)!
+## Troubleshooting
+
+**`yq v4 is required`**
+: Install Mike Farah's `yq`, not the Python wrapper with the same name.
+
+**The session already exists**
+: Tmuxify attaches/switches to an existing session with the same name. Use a different `session.name` if you want a separate workspace.
+
+**I want to use tmuxify in a script**
+: Use `tmuxify --detach --file layout.yml`, then attach later with `tmux attach -t <session>`.
+
+**I do not trust the layout commands yet**
+: Use `--dry-run` first, then `--no-commands` if you want only the pane layout.
+
+**Export refused to overwrite a file**
+: Tmuxify avoids clobbering existing files and symlinks. Pick a new filename or remove the old file intentionally.
 
 ## Contributing
 
-Contributions are welcome and appreciated! Here are several ways you can contribute:
+Contributions are welcome and appreciated.
 
-### Bug Reports
-- Use the GitHub issue tracker to report bugs
-- Describe what happened and what you expected
-- Include steps to reproduce the issue
-- Mention your OS, tmux version, and shell environment
+- Include your OS, shell, tmux version, and yq version in bug reports.
+- Run `shellcheck tmuxify` and `tests/run.sh` before opening a pull request.
+- Add or update example layouts with `tmuxify --dry-run --file <layout>` validation.
 
-### Feature Requests
-- Open an issue describing the feature and its value
-- Tag it as an enhancement
-- If possible, include examples of how you'd use the feature
+## Backward compatibility
 
-### Pull Requests
-Before creating a pull request, please open an issue and discuss the fix or improvement
-
-### Layout Contributions
-We especially welcome contributions of new layout templates!
-- Add your layout to the `examples/layouts/` directory
-- Include a descriptive comment header explaining the layout's purpose
-- Make sure to add ASCII art showing the resulting layout
-
-Thank you for helping make Tmuxify better!
-
-## Backward Compatibility
-
-Tmuxify v2+ automatically handles the legacy layout format of v1.x, applying the classic 4-pane structure for projects without a `.tmuxify.yml` file.
+Tmuxify v2+ uses the recursive layout format shown above and still provides a useful default layout for projects without `.tmuxify.yml`.
 
 ## License
 
