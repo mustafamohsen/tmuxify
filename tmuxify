@@ -7,6 +7,7 @@ CUSTOM_CONFIG=""
 EXPORT_FLAG=0
 EXPORT_FILENAME=""
 DRY_RUN=0
+DETACH=0
 RUN_COMMANDS=1
 UPDATED_WITH_COMMAND_NOTICE=0
 TMP_DIR=""
@@ -31,6 +32,7 @@ Options:
   -f, --file LAYOUT_FILE     Use a specific layout file (overrides .tmuxify.yml)
   -e, --export [FILENAME]    Export current tmux session layout to YAML
       --dry-run              Validate and preview the layout without creating tmux sessions
+      --detach               Create the session without attaching or switching clients
       --no-commands          Create panes without running configured commands
 
 Security note:
@@ -82,6 +84,9 @@ while [ $# -gt 0 ]; do
       ;;
     --dry-run)
       DRY_RUN=1
+      ;;
+    --detach)
+      DETACH=1
       ;;
     --no-commands)
       RUN_COMMANDS=0
@@ -438,6 +443,10 @@ fi
 attach_or_switch() {
   local target_session
   target_session="$1"
+  if [ "$DETACH" -eq 1 ]; then
+    success "Session '$target_session' is ready. Attach with: tmux attach -t $target_session"
+    exit 0
+  fi
   if [ -n "$TMUX" ]; then
     exec tmux switch-client -t "$target_session"
   fi
@@ -563,7 +572,7 @@ echo "🚀 Creating new session: $session_name"
 
 if [ ! -f "$CONFIG_FILE" ]; then
   create_default_layout
-  success "Session '$session_name' created successfully. Attaching..."
+  success "Session '$session_name' created successfully."
   attach_or_switch "$session_name"
 fi
 
@@ -593,5 +602,5 @@ else
   tmux_or_die tmux select-pane -t "$root_pane"
 fi
 
-success "Session '$session_name' created successfully. Attaching..."
+success "Session '$session_name' created successfully."
 attach_or_switch "$session_name"
