@@ -10,6 +10,9 @@ cleanup() {
   tmux list-sessions -F '#{session_name}' 2>/dev/null | grep "^${TEST_PREFIX}" | while read -r session; do
     tmux kill-session -t "$session" 2>/dev/null || true
   done
+  if [ -d "/tmp/${TEST_PREFIX}_base_index_sock" ]; then
+    env -u TMUX TMUX_TMPDIR="/tmp/${TEST_PREFIX}_base_index_sock" tmux kill-server >/dev/null 2>&1 || true
+  fi
   rm -rf "$TMP_DIR" "/tmp/${TEST_PREFIX}_base_index_sock"
 }
 trap cleanup EXIT
