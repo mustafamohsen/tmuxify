@@ -561,8 +561,8 @@ create_default_layout() {
   info "Using default 4-pane layout."
   tmux_or_die tmux new-session -d -s "$session_name" -c "$WORKDIR" "nvim ."
   SESSION_CREATED=1
-  tmux_or_die tmux set-window-option -t "$session_name:0" aggressive-resize on
-  pane0=$(tmux display-message -t "$session_name:0.0" -p '#{pane_id}') || die "Failed to identify initial pane."
+  tmux_or_die tmux set-window-option -t "$session_name" aggressive-resize on
+  pane0=$(tmux display-message -t "$session_name" -p '#{pane_id}') || die "Failed to identify initial pane."
   pane1=$(tmux split-window -h -t "$pane0" -c "$WORKDIR" -P -F '#{pane_id}') || die "Failed to create default pane."
   apply_size horizontal "$pane0" "50%"
   pane2=$(tmux split-window -v -t "$pane1" -c "$WORKDIR" -P -F '#{pane_id}') || die "Failed to create default pane."
@@ -590,8 +590,8 @@ fi
 tmux_or_die tmux new-session -d -s "$session_name" -c "$WORKDIR"
 SESSION_CREATED=1
 info "Building layout from $CONFIG_FILE..."
-tmux_or_die tmux set-window-option -t "$session_name:0" aggressive-resize on
-root_pane=$(tmux display-message -t "$session_name:0.0" -p '#{pane_id}') || die "Failed to identify initial pane."
+tmux_or_die tmux set-window-option -t "$session_name" aggressive-resize on
+root_pane=$(tmux display-message -t "$session_name" -p '#{pane_id}') || die "Failed to identify initial pane."
 build_layout ".layout" "$root_pane"
 
 initial_focus=$(yq -r '.session.initial_focus // ""' "$CONFIG_FILE")

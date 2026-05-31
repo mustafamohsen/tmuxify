@@ -10,7 +10,10 @@ cleanup() {
   tmux list-sessions -F '#{session_name}' 2>/dev/null | grep "^${TEST_PREFIX}" | while read -r session; do
     tmux kill-session -t "$session" 2>/dev/null || true
   done
-  rm -rf "$TMP_DIR"
+  if [ -d "/tmp/${TEST_PREFIX}_base_index_sock" ]; then
+    env -u TMUX TMUX_TMPDIR="/tmp/${TEST_PREFIX}_base_index_sock" tmux kill-server >/dev/null 2>&1 || true
+  fi
+  rm -rf "$TMP_DIR" "/tmp/${TEST_PREFIX}_base_index_sock"
 }
 trap cleanup EXIT
 
@@ -45,7 +48,7 @@ run_expect_failure() {
   printf '%s' "$output"
 }
 
-echo "1..7"
+echo "1..8"
 
 output=$(run_expect_success "$TMUXIFY" --help)
 assert_contains "$output" "--dry-run"
@@ -126,7 +129,35 @@ active_pane=$(tmux display-message -p -t "${TEST_PREFIX}_nested" '#{pane_index}'
 [[ "$active_pane" == "0" ]] || fail "expected editor pane to be active, got pane $active_pane"
 echo "ok 6 - detached nested session creates expected panes and focus"
 
+cat > "$TMP_DIR/base-index.yml" <<YAML
+session:
+  name: ${TEST_PREFIX}_base_index
+  initial_focus: editor
+layout:
+  type: horizontal
+  splits:
+    - id: editor
+      size: 50%
+    - id: shell
+      size: 50%
+YAML
+base_index_sockdir="/tmp/${TEST_PREFIX}_base_index_sock"
+rm -rf "$base_index_sockdir"
+mkdir -p "$base_index_sockdir"
+env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux new-session -d -s "${TEST_PREFIX}_keepalive"
+env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux set-option -g base-index 1
+env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux set-window-option -g pane-base-index 1
+run_expect_success env -u TMUX TMUX_TMPDIR="$base_index_sockdir" "$TMUXIFY" --file "$TMP_DIR/base-index.yml" --detach --no-commands >/dev/null
+window_index=$(env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux list-windows -t "${TEST_PREFIX}_base_index" -F '#{window_index}')
+[[ "$window_index" == "1" ]] || fail "expected first window index 1 with base-index enabled, got $window_index"
+pane_count=$(env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux list-panes -t "${TEST_PREFIX}_base_index" | wc -l | tr -d ' ')
+[[ "$pane_count" == "2" ]] || fail "expected 2 panes with base-index enabled, got $pane_count"
+pane_indices=$(env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux list-panes -t "${TEST_PREFIX}_base_index" -F '#{pane_index}' | paste -sd, -)
+[[ "$pane_indices" == "1,2" ]] || fail "expected pane indices 1,2 with pane-base-index enabled, got $pane_indices"
+env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux kill-server >/dev/null 2>&1 || true
+echo "ok 7 - detached session works with tmux base-index 1"
+
 while IFS= read -r example; do
   run_expect_success "$TMUXIFY" --dry-run --file "$example" >/dev/null
 done < <(find "$ROOT_DIR/examples/layouts" -type f -name '*.yml' -print | sort)
-echo "ok 7 - bundled examples validate"
+echo "ok 8 - bundled examples validate"
