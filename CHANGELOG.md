@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.5.2] – 2026-05-31
+
+### Fixed
+- Fixed session creation for tmux configurations that use `base-index 1` by avoiding hard-coded window `0` targets.
+- Made initial pane detection compatible with custom `pane-base-index` settings.
+
+### Tests
+- Added an isolated regression test covering `base-index 1` and `pane-base-index 1` tmux configurations.
+
 ## [2.5.1] – 2026-05-30
 
 ### Changed
