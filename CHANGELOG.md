@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.5.3] – 2026-05-31
+
+### Fixed
+- Fixed `tmuxify --update` installs reporting an older version when a stale sidecar `VERSION` file is present or when the script is installed standalone.
+- Updated release version detection during self-update to read the embedded script version.
+
+### Tests
+- Added coverage ensuring `tmuxify --version` reports the embedded release version even next to a stale `VERSION` file.
+
 ## [2.5.2] – 2026-05-31
 
 ### Fixed

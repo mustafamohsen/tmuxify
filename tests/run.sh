@@ -48,16 +48,25 @@ run_expect_failure() {
   printf '%s' "$output"
 }
 
-echo "1..8"
+echo "1..9"
 
 output=$(run_expect_success "$TMUXIFY" --help)
 assert_contains "$output" "--dry-run"
 assert_contains "$output" "--no-commands"
 echo "ok 1 - help documents safe workflow flags"
 
+expected_version=$(<"$ROOT_DIR/VERSION")
 output=$(run_expect_success "$TMUXIFY" --version)
-assert_contains "$output" "tmuxify version"
+assert_contains "$output" "tmuxify version $expected_version"
 echo "ok 2 - version works"
+
+stale_install_dir="$TMP_DIR/stale-install"
+mkdir -p "$stale_install_dir"
+cp "$TMUXIFY" "$stale_install_dir/tmuxify"
+echo "0.0.0" > "$stale_install_dir/VERSION"
+output=$(run_expect_success "$stale_install_dir/tmuxify" --version)
+assert_contains "$output" "tmuxify version $expected_version"
+echo "ok 3 - script version ignores stale sidecar VERSION file"
 
 cat > "$TMP_DIR/valid.yml" <<YAML
 session:
@@ -89,7 +98,7 @@ YAML
 output=$(run_expect_success "$TMUXIFY" --dry-run --file "$TMP_DIR/valid.yml")
 assert_contains "$output" "Configuration is valid"
 assert_contains "$output" "Layout plan"
-echo "ok 3 - dry-run validates nested config"
+echo "ok 4 - dry-run validates nested config"
 
 cat > "$TMP_DIR/invalid-focus.yml" <<YAML
 session:
@@ -105,7 +114,7 @@ layout:
 YAML
 output=$(run_expect_failure "$TMUXIFY" --dry-run --file "$TMP_DIR/invalid-focus.yml")
 assert_contains "$output" "does not match any pane id"
-echo "ok 4 - invalid initial focus is rejected"
+echo "ok 5 - invalid initial focus is rejected"
 
 cat > "$TMP_DIR/duplicate.yml" <<YAML
 session:
@@ -120,14 +129,14 @@ layout:
 YAML
 output=$(run_expect_failure "$TMUXIFY" --dry-run --file "$TMP_DIR/duplicate.yml")
 assert_contains "$output" "Duplicate pane id"
-echo "ok 5 - duplicate pane IDs are rejected"
+echo "ok 6 - duplicate pane IDs are rejected"
 
 run_expect_success "$TMUXIFY" --file "$TMP_DIR/valid.yml" --detach --no-commands >/dev/null
 pane_count=$(tmux list-panes -t "${TEST_PREFIX}_nested" | wc -l | tr -d ' ')
 [[ "$pane_count" == "4" ]] || fail "expected 4 panes, got $pane_count"
 active_pane=$(tmux display-message -p -t "${TEST_PREFIX}_nested" '#{pane_index}')
 [[ "$active_pane" == "0" ]] || fail "expected editor pane to be active, got pane $active_pane"
-echo "ok 6 - detached nested session creates expected panes and focus"
+echo "ok 7 - detached nested session creates expected panes and focus"
 
 cat > "$TMP_DIR/base-index.yml" <<YAML
 session:
@@ -155,9 +164,9 @@ pane_count=$(env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux list-panes -t "$
 pane_indices=$(env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux list-panes -t "${TEST_PREFIX}_base_index" -F '#{pane_index}' | paste -sd, -)
 [[ "$pane_indices" == "1,2" ]] || fail "expected pane indices 1,2 with pane-base-index enabled, got $pane_indices"
 env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux kill-server >/dev/null 2>&1 || true
-echo "ok 7 - detached session works with tmux base-index 1"
+echo "ok 8 - detached session works with tmux base-index 1"
 
 while IFS= read -r example; do
   run_expect_success "$TMUXIFY" --dry-run --file "$example" >/dev/null
 done < <(find "$ROOT_DIR/examples/layouts" -type f -name '*.yml' -print | sort)
-echo "ok 8 - bundled examples validate"
+echo "ok 9 - bundled examples validate"
