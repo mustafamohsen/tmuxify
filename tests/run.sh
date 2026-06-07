@@ -48,11 +48,12 @@ run_expect_failure() {
   printf '%s' "$output"
 }
 
-echo "1..13"
+echo "1..14"
 
 output=$(run_expect_success "$TMUXIFY" --help)
 assert_contains "$output" "--dry-run"
 assert_contains "$output" "--no-commands"
+assert_contains "$output" "--list-layouts"
 echo "ok 1 - help documents safe workflow flags"
 
 expected_version=$(<"$ROOT_DIR/VERSION")
@@ -240,7 +241,14 @@ assert_contains "$output" "Example layouts installed"
 [[ -f "$update_xdg_home/tmuxify/layouts/examples/example.yml" ]] || fail "expected update to install example layouts"
 echo "ok 12 - update creates config folders and refreshes example layouts"
 
+output=$(run_expect_success env XDG_CONFIG_HOME="$update_xdg_home" bash -c 'cd "$1" && "$2" --list-layouts' _ "$global_project" "$TMUXIFY")
+assert_contains "$output" "Available tmuxify layouts"
+assert_contains "$output" "project"
+assert_contains "$output" "example"
+assert_contains "$output" "example.yml"
+echo "ok 13 - list-layouts shows project and user layouts"
+
 while IFS= read -r example; do
   run_expect_success "$TMUXIFY" --dry-run --file "$example" >/dev/null
 done < <(find "$ROOT_DIR/examples/layouts" -type f -name '*.yml' -print | sort)
-echo "ok 13 - bundled examples validate"
+echo "ok 14 - bundled examples validate"

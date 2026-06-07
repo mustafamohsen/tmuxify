@@ -12,6 +12,7 @@ GLOBAL_DEFAULT_CONFIG_FILE="$GLOBAL_LAYOUTS_DIR/default.yml"
 CUSTOM_CONFIG=""
 EXPORT_FLAG=0
 EXPORT_FILENAME=""
+LIST_LAYOUTS=0
 DRY_RUN=0
 DETACH=0
 RUN_COMMANDS=1
@@ -35,6 +36,7 @@ Options:
   -u, --update               Download and install the latest version safely
   -h, --help                 Show help
   -l, --list                 List active tmux sessions
+      --list-layouts         List project and user layout files
   -f, --file LAYOUT_FILE     Use a specific layout file (overrides .tmuxify.yml)
   -e, --export [FILENAME]    Export current tmux session layout to YAML
       --dry-run              Validate and preview the layout without creating tmux sessions
@@ -73,6 +75,9 @@ while [ $# -gt 0 ]; do
       tmux list-sessions || echo "No active tmux sessions found."
       exit 0
       ;;
+    --list-layouts)
+      LIST_LAYOUTS=1
+      ;;
     --file|-f)
       if [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; then
         CUSTOM_CONFIG="$2"
@@ -105,6 +110,33 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+list_layouts() {
+  local project_layout found
+  project_layout="$(pwd)/.tmuxify.yml"
+  found=0
+
+  printf 'Available tmuxify layouts:\n'
+  if [ -f "$project_layout" ]; then
+    printf '  project     %s\n' "$project_layout"
+    found=1
+  fi
+  if [ -f "$GLOBAL_DEFAULT_CONFIG_FILE" ]; then
+    printf '  default     %s\n' "$GLOBAL_DEFAULT_CONFIG_FILE"
+    found=1
+  fi
+  if [ -d "$GLOBAL_EXAMPLES_DIR" ]; then
+    while IFS= read -r layout_file; do
+      printf '  example     %s\n' "$layout_file"
+      found=1
+    done < <(find "$GLOBAL_EXAMPLES_DIR" -type f \( -name '*.yml' -o -name '*.yaml' \) -print | sort)
+  fi
+
+  if [ "$found" -eq 0 ]; then
+    printf '  none found\n'
+    printf '\nRun tmuxify --update to download bundled examples into %s\n' "$GLOBAL_EXAMPLES_DIR"
+  fi
+}
 
 install_example_layouts() {
   local archive temp_extract layouts_dir
@@ -197,6 +229,11 @@ safe_update() {
 
 if [ "${UPDATE_REQUESTED:-0}" -eq 1 ]; then
   safe_update
+fi
+
+if [ "$LIST_LAYOUTS" -eq 1 ]; then
+  list_layouts
+  exit 0
 fi
 
 command -v yq >/dev/null || die "yq v4 is required but not found. Please install it (https://github.com/mikefarah/yq)."

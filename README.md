@@ -73,6 +73,7 @@ cp "${XDG_CONFIG_HOME:-$HOME/.config}/tmuxify/layouts/examples/golang-dev.yml" \
 | `--update` | `-u` | Download and install the latest version safely. |
 | `--help` | `-h` | Display usage instructions. |
 | `--list` | `-l` | List active tmux sessions. |
+| `--list-layouts` | | List project and user layout files. |
 | `--file FILE` | `-f` | Use a specific layout file. |
 | `--export [FILE]` | `-e` | Export current tmux session layout to a simplified YAML template. |
 | `--dry-run` | | Validate and preview the selected layout without creating a tmux session. |
@@ -82,6 +83,7 @@ cp "${XDG_CONFIG_HOME:-$HOME/.config}/tmuxify/layouts/examples/golang-dev.yml" \
 Useful safe workflow:
 
 ```bash
+tmuxify --list-layouts             # list project/default/example layouts
 tmuxify --dry-run                  # inspect the selected layout
 tmuxify --no-commands              # create panes without running commands
 tmuxify                            # normal trusted-project flow
