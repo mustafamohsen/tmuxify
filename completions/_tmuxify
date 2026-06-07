@@ -1,0 +1,30 @@
+#compdef tmuxify
+# zsh completion for tmuxify
+
+_tmuxify_completion_options() {
+  tmuxify --completion-options 2>/dev/null
+}
+
+_tmuxify() {
+  local -a specs
+  local line opt aliases zsh_aliases kind desc
+  specs=()
+
+  while IFS= read -r line; do
+    aliases=${line%%:*}
+    kind=${line#*:}
+    [[ $kind == $line ]] && kind=""
+    opt=${aliases%%|*}
+    zsh_aliases="{${aliases//|/,}}"
+    desc="tmuxify option"
+    if [[ $kind == file ]]; then
+      specs+=("${zsh_aliases}[${desc}]:layout file:_files")
+    else
+      specs+=("${zsh_aliases}[${desc}]")
+    fi
+  done < <(_tmuxify_completion_options)
+
+  _arguments -s $specs
+}
+
+_tmuxify "$@"

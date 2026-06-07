@@ -48,7 +48,7 @@ run_expect_failure() {
   printf '%s' "$output"
 }
 
-echo "1..14"
+echo "1..16"
 
 output=$(run_expect_success "$TMUXIFY" --help)
 assert_contains "$output" "--dry-run"
@@ -56,10 +56,21 @@ assert_contains "$output" "--no-commands"
 assert_contains "$output" "--list-layouts"
 echo "ok 1 - help documents safe workflow flags"
 
+completion_options=$(run_expect_success "$TMUXIFY" --completion-options)
+while IFS= read -r flag; do
+  [[ -z "$flag" ]] && continue
+  assert_contains "$completion_options" "$flag"
+done < <(printf '%s\n' "$output" | grep -oE -- '--[a-z0-9-]+' | sort -u)
+bash -n "$ROOT_DIR/completions/tmuxify.bash"
+if command -v zsh >/dev/null 2>&1; then
+  zsh -n "$ROOT_DIR/completions/_tmuxify"
+fi
+echo "ok 2 - completion metadata covers help flags and scripts parse"
+
 expected_version=$(<"$ROOT_DIR/VERSION")
 output=$(run_expect_success "$TMUXIFY" --version)
 assert_contains "$output" "tmuxify version $expected_version"
-echo "ok 2 - version works"
+echo "ok 3 - version works"
 
 stale_install_dir="$TMP_DIR/stale-install"
 mkdir -p "$stale_install_dir"
@@ -67,7 +78,7 @@ cp "$TMUXIFY" "$stale_install_dir/tmuxify"
 echo "0.0.0" > "$stale_install_dir/VERSION"
 output=$(run_expect_success "$stale_install_dir/tmuxify" --version)
 assert_contains "$output" "tmuxify version $expected_version"
-echo "ok 3 - script version ignores stale sidecar VERSION file"
+echo "ok 4 - script version ignores stale sidecar VERSION file"
 
 cat > "$TMP_DIR/valid.yml" <<YAML
 session:
@@ -99,7 +110,7 @@ YAML
 output=$(run_expect_success "$TMUXIFY" --dry-run --file "$TMP_DIR/valid.yml")
 assert_contains "$output" "Configuration is valid"
 assert_contains "$output" "Layout plan"
-echo "ok 4 - dry-run validates nested config"
+echo "ok 5 - dry-run validates nested config"
 
 cat > "$TMP_DIR/invalid-focus.yml" <<YAML
 session:
@@ -115,7 +126,7 @@ layout:
 YAML
 output=$(run_expect_failure "$TMUXIFY" --dry-run --file "$TMP_DIR/invalid-focus.yml")
 assert_contains "$output" "does not match any pane id"
-echo "ok 5 - invalid initial focus is rejected"
+echo "ok 6 - invalid initial focus is rejected"
 
 cat > "$TMP_DIR/duplicate.yml" <<YAML
 session:
@@ -130,7 +141,7 @@ layout:
 YAML
 output=$(run_expect_failure "$TMUXIFY" --dry-run --file "$TMP_DIR/duplicate.yml")
 assert_contains "$output" "Duplicate pane id"
-echo "ok 6 - duplicate pane IDs are rejected"
+echo "ok 7 - duplicate pane IDs are rejected"
 
 run_expect_success "$TMUXIFY" --file "$TMP_DIR/valid.yml" --detach --no-commands >/dev/null
 pane_count=$(tmux list-panes -t "${TEST_PREFIX}_nested" | wc -l | tr -d ' ')
@@ -138,7 +149,7 @@ pane_count=$(tmux list-panes -t "${TEST_PREFIX}_nested" | wc -l | tr -d ' ')
 active_pane=$(tmux display-message -p -t "${TEST_PREFIX}_nested" '#{pane_index}')
 first_pane=$(tmux list-panes -t "${TEST_PREFIX}_nested" -F '#{pane_index}' | head -n 1)
 [[ "$active_pane" == "$first_pane" ]] || fail "expected editor pane to be active, got pane $active_pane"
-echo "ok 7 - detached nested session creates expected panes and focus"
+echo "ok 8 - detached nested session creates expected panes and focus"
 
 cat > "$TMP_DIR/base-index.yml" <<YAML
 session:
@@ -166,7 +177,7 @@ pane_count=$(env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux list-panes -t "$
 pane_indices=$(env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux list-panes -t "${TEST_PREFIX}_base_index" -F '#{pane_index}' | paste -sd, -)
 [[ "$pane_indices" == "1,2" ]] || fail "expected pane indices 1,2 with pane-base-index enabled, got $pane_indices"
 env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux kill-server >/dev/null 2>&1 || true
-echo "ok 8 - detached session works with tmux base-index 1"
+echo "ok 9 - detached session works with tmux base-index 1"
 
 xdg_home="$TMP_DIR/xdg"
 global_project="$TMP_DIR/global-project"
@@ -185,7 +196,7 @@ YAML
 output=$(run_expect_success env XDG_CONFIG_HOME="$xdg_home" bash -c 'cd "$1" && "$2" --dry-run' _ "$global_project" "$TMUXIFY")
 assert_contains "$output" "Using global default layout file"
 assert_contains "$output" "Session: ${TEST_PREFIX}_global_default"
-echo "ok 9 - global default layout is used when project config is absent"
+echo "ok 10 - global default layout is used when project config is absent"
 
 cat > "$global_project/.tmuxify.yml" <<YAML
 session:
@@ -200,7 +211,7 @@ layout:
 YAML
 output=$(run_expect_success env XDG_CONFIG_HOME="$xdg_home" bash -c 'cd "$1" && "$2" --dry-run' _ "$global_project" "$TMUXIFY")
 assert_contains "$output" "Session: ${TEST_PREFIX}_project_override"
-echo "ok 10 - project layout overrides global default layout"
+echo "ok 11 - project layout overrides global default layout"
 
 cat > "$TMP_DIR/file-override.yml" <<YAML
 session:
@@ -215,12 +226,13 @@ layout:
 YAML
 output=$(run_expect_success env XDG_CONFIG_HOME="$xdg_home" bash -c 'cd "$1" && "$2" --dry-run --file "$3"' _ "$global_project" "$TMUXIFY" "$TMP_DIR/file-override.yml")
 assert_contains "$output" "Session: ${TEST_PREFIX}_file_override"
-echo "ok 11 - explicit file layout overrides project and global layouts"
+echo "ok 12 - explicit file layout overrides project and global layouts"
 
 update_install_dir="$TMP_DIR/update-install"
 update_xdg_home="$TMP_DIR/update-xdg"
 archive_root="$TMP_DIR/archive/tmuxify-main/examples/layouts"
-mkdir -p "$update_install_dir" "$archive_root"
+archive_completions="$TMP_DIR/archive/tmuxify-main/completions"
+mkdir -p "$update_install_dir" "$archive_root" "$archive_completions"
 cp "$TMUXIFY" "$update_install_dir/tmuxify"
 chmod +x "$update_install_dir/tmuxify"
 cat > "$archive_root/example.yml" <<YAML
@@ -234,21 +246,29 @@ layout:
     - id: shell
       size: 50%
 YAML
+cp "$ROOT_DIR/completions/tmuxify.bash" "$archive_completions/tmuxify.bash"
+cp "$ROOT_DIR/completions/_tmuxify" "$archive_completions/_tmuxify"
 (cd "$TMP_DIR/archive" && tar -czf "$TMP_DIR/examples.tar.gz" tmuxify-main)
-output=$(run_expect_success env XDG_CONFIG_HOME="$update_xdg_home" TMUXIFY_REPO_URL="file://$TMUXIFY" TMUXIFY_EXAMPLES_ARCHIVE_URL="file://$TMP_DIR/examples.tar.gz" "$update_install_dir/tmuxify" --update)
+output=$(run_expect_success env XDG_CONFIG_HOME="$update_xdg_home" TMUXIFY_REPO_URL="file://$TMUXIFY" TMUXIFY_EXAMPLES_ARCHIVE_URL="file://$TMP_DIR/examples.tar.gz" TMUXIFY_COMPLETIONS_ARCHIVE_URL="file://$TMP_DIR/examples.tar.gz" "$update_install_dir/tmuxify" --update)
 assert_contains "$output" "Example layouts installed"
+assert_contains "$output" "Completions installed"
 [[ -d "$update_xdg_home/tmuxify/layouts" ]] || fail "expected update to create layouts directory"
 [[ -f "$update_xdg_home/tmuxify/layouts/examples/example.yml" ]] || fail "expected update to install example layouts"
-echo "ok 12 - update creates config folders and refreshes example layouts"
+[[ -f "$update_xdg_home/tmuxify/completions/tmuxify.bash" ]] || fail "expected update to install bash completions"
+[[ -f "$update_xdg_home/tmuxify/completions/_tmuxify" ]] || fail "expected update to install zsh completions"
+echo "ok 13 - update creates config folders and refreshes examples and completions"
 
 output=$(run_expect_success env XDG_CONFIG_HOME="$update_xdg_home" bash -c 'cd "$1" && "$2" --list-layouts' _ "$global_project" "$TMUXIFY")
 assert_contains "$output" "Available tmuxify layouts"
 assert_contains "$output" "project"
 assert_contains "$output" "example"
 assert_contains "$output" "example.yml"
-echo "ok 13 - list-layouts shows project and user layouts"
+echo "ok 14 - list-layouts shows project and user layouts"
 
 while IFS= read -r example; do
   run_expect_success "$TMUXIFY" --dry-run --file "$example" >/dev/null
 done < <(find "$ROOT_DIR/examples/layouts" -type f -name '*.yml' -print | sort)
-echo "ok 14 - bundled examples validate"
+echo "ok 15 - bundled examples validate"
+
+run_expect_success env PATH="/usr/bin:/bin" "$TMUXIFY" --completion-options >/dev/null
+echo "ok 16 - completion metadata does not require optional dependencies"

@@ -3,16 +3,19 @@
 VERSION="2.5.5"
 REPO_URL="${TMUXIFY_REPO_URL:-https://raw.githubusercontent.com/mustafamohsen/tmuxify/main/tmuxify}"
 EXAMPLES_ARCHIVE_URL="${TMUXIFY_EXAMPLES_ARCHIVE_URL:-https://github.com/mustafamohsen/tmuxify/archive/refs/heads/main.tar.gz}"
+COMPLETIONS_ARCHIVE_URL="${TMUXIFY_COMPLETIONS_ARCHIVE_URL:-$EXAMPLES_ARCHIVE_URL}"
 CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 TMUXIFY_CONFIG_DIR="$CONFIG_HOME/tmuxify"
 GLOBAL_LAYOUTS_DIR="$TMUXIFY_CONFIG_DIR/layouts"
 GLOBAL_EXAMPLES_DIR="$GLOBAL_LAYOUTS_DIR/examples"
+GLOBAL_COMPLETIONS_DIR="$TMUXIFY_CONFIG_DIR/completions"
 GLOBAL_DEFAULT_CONFIG_FILE="$GLOBAL_LAYOUTS_DIR/default.yml"
 
 CUSTOM_CONFIG=""
 EXPORT_FLAG=0
 EXPORT_FILENAME=""
 LIST_LAYOUTS=0
+COMPLETION_OPTIONS=0
 DRY_RUN=0
 DETACH=0
 RUN_COMMANDS=1
@@ -42,6 +45,9 @@ Options:
       --dry-run              Validate and preview the layout without creating tmux sessions
       --detach               Create the session without attaching or switching clients
       --no-commands          Create panes without running configured commands
+
+Completion metadata:
+      --completion-options   Print machine-readable option metadata
 
 Security note:
   Layout commands are shell commands. Review layouts from untrusted projects first,
@@ -78,6 +84,9 @@ while [ $# -gt 0 ]; do
     --list-layouts)
       LIST_LAYOUTS=1
       ;;
+    --completion-options)
+      COMPLETION_OPTIONS=1
+      ;;
     --file|-f)
       if [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; then
         CUSTOM_CONFIG="$2"
@@ -111,6 +120,22 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+print_completion_options() {
+  cat <<'EOF'
+--version|-v
+--update|-u
+--help|-h
+--list|-l
+--list-layouts
+--file|-f:file
+--export|-e:file
+--dry-run
+--detach
+--no-commands
+--completion-options
+EOF
+}
+
 list_layouts() {
   local project_layout found
   project_layout="$(pwd)/.tmuxify.yml"
@@ -136,6 +161,32 @@ list_layouts() {
     printf '  none found\n'
     printf '\nRun tmuxify --update to download bundled examples into %s\n' "$GLOBAL_EXAMPLES_DIR"
   fi
+}
+
+install_completions() {
+  local archive temp_extract completions_dir
+  command -v tar >/dev/null || { warn "tar is required to install completions; skipping completions."; return 0; }
+
+  archive="$1"
+  temp_extract="$2"
+  mkdir -p "$temp_extract" || die "Failed to prepare completions directory."
+
+  if ! tar -xzf "$archive" -C "$temp_extract" 2>/dev/null; then
+    warn "Could not extract completions from update archive; leaving existing completions unchanged."
+    return 0
+  fi
+  completions_dir=$(dirname "$(find "$temp_extract" -path '*/completions/tmuxify.bash' -type f | head -n 1)")
+  if [ -z "$completions_dir" ] || [ "$completions_dir" = "." ]; then
+    warn "Could not find completions in update archive; leaving existing completions unchanged."
+    return 0
+  fi
+
+  rm -rf "$GLOBAL_COMPLETIONS_DIR"
+  mkdir -p "$GLOBAL_COMPLETIONS_DIR" || die "Failed to create completions directory: $GLOBAL_COMPLETIONS_DIR"
+  cp -R "$completions_dir/." "$GLOBAL_COMPLETIONS_DIR/" || die "Failed to install completions."
+  success "Completions installed to $GLOBAL_COMPLETIONS_DIR"
+  info "Bash: source $GLOBAL_COMPLETIONS_DIR/tmuxify.bash"
+  info "Zsh: add $GLOBAL_COMPLETIONS_DIR to fpath and run compinit"
 }
 
 install_example_layouts() {
@@ -164,13 +215,14 @@ install_example_layouts() {
 }
 
 safe_update() {
-  local temp_dir temp_file examples_archive first_line candidate_version SCRIPT_PATH INSTALL_DIR INSTALL_PATH backup
+  local temp_dir temp_file examples_archive completions_archive first_line candidate_version SCRIPT_PATH INSTALL_DIR INSTALL_PATH backup
   command -v curl >/dev/null || die "curl is required for --update."
 
   info "Downloading latest tmuxify..."
   temp_dir=$(mktemp -d 2>/dev/null || mktemp -d -t tmuxify-update) || die "Failed to create temporary directory."
   temp_file="$temp_dir/tmuxify"
   examples_archive="$temp_dir/tmuxify-examples.tar.gz"
+  completions_archive="$temp_dir/tmuxify-completions.tar.gz"
 
   if ! curl -fsSL "$REPO_URL" -o "$temp_file"; then
     rm -rf "$temp_dir"
@@ -195,6 +247,11 @@ safe_update() {
     warn "Failed to download example layouts from $EXAMPLES_ARCHIVE_URL; continuing with script update."
     examples_archive=""
   fi
+  info "Downloading latest completions..."
+  if ! curl -fsSL "$COMPLETIONS_ARCHIVE_URL" -o "$completions_archive"; then
+    warn "Failed to download completions from $COMPLETIONS_ARCHIVE_URL; continuing with script update."
+    completions_archive=""
+  fi
   [ -n "$candidate_version" ] || candidate_version="unknown"
 
   SCRIPT_PATH=$(command -v "$0" 2>/dev/null || printf '%s' "$0")
@@ -213,9 +270,12 @@ safe_update() {
 
   if mv "$temp_file" "$INSTALL_PATH" && chmod +x "$INSTALL_PATH"; then
     [ -e "$backup" ] && rm -f "$backup"
-    mkdir -p "$TMUXIFY_CONFIG_DIR" "$GLOBAL_LAYOUTS_DIR" || { rm -rf "$temp_dir"; die "Failed to create tmuxify config directories."; }
+    mkdir -p "$TMUXIFY_CONFIG_DIR" "$GLOBAL_LAYOUTS_DIR" "$GLOBAL_COMPLETIONS_DIR" || { rm -rf "$temp_dir"; die "Failed to create tmuxify config directories."; }
     if [ -n "$examples_archive" ]; then
       install_example_layouts "$examples_archive" "$temp_dir/examples"
+    fi
+    if [ -n "$completions_archive" ]; then
+      install_completions "$completions_archive" "$temp_dir/completions"
     fi
     rm -rf "$temp_dir"
     success "tmuxify updated successfully to version $candidate_version"
@@ -229,6 +289,11 @@ safe_update() {
 
 if [ "${UPDATE_REQUESTED:-0}" -eq 1 ]; then
   safe_update
+fi
+
+if [ "${COMPLETION_OPTIONS:-0}" -eq 1 ]; then
+  print_completion_options
+  exit 0
 fi
 
 if [ "$LIST_LAYOUTS" -eq 1 ]; then
