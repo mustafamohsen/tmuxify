@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.5.5] – 2026-06-07
+
+### Added
+- Added `tmuxify --list-layouts` to list project, global default, and downloaded example layout files.
+
+### Changed
+- Documented the layout listing flag in the command options and safe workflow examples.
+
+### Tests
+- Added coverage for listing project and user layout files.
+
 ## [2.5.4] – 2026-06-07
 
 ### Added
