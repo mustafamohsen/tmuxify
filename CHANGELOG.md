@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.5.6] – 2026-06-07
+
+### Added
+- Added Bash and Zsh completion scripts under `completions/`.
+- Added `tmuxify --completion-options` for machine-readable option metadata used by completions and tests.
+- Added `tmuxify --update` support for refreshing completions under `${XDG_CONFIG_HOME:-~/.config}/tmuxify/completions/`.
+
+### Changed
+- Documented shell completion setup for Bash and Zsh.
+
+### Tests
+- Added completion parsing checks and coverage that compares documented help flags with completion metadata to prevent drift.
+
 ## [2.5.5] – 2026-06-07
 
 ### Added
