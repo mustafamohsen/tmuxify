@@ -54,7 +54,16 @@ Configuration priority:
 
 1. `--file <path>` uses the specified YAML file.
 2. `.tmuxify.yml` in the current directory.
-3. Built-in default four-pane layout when no config exists.
+3. `${XDG_CONFIG_HOME:-~/.config}/tmuxify/layouts/default.yml` for a reusable user default.
+4. Built-in default four-pane layout when no config exists.
+
+Tmuxify reserves `${XDG_CONFIG_HOME:-~/.config}/tmuxify/` for user-level files. `tmuxify --update` creates the config folders and refreshes bundled examples under `layouts/examples/`. Put your reusable default layout at `layouts/default.yml`:
+
+```bash
+mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/tmuxify/layouts"
+cp "${XDG_CONFIG_HOME:-$HOME/.config}/tmuxify/layouts/examples/golang-dev.yml" \
+  "${XDG_CONFIG_HOME:-$HOME/.config}/tmuxify/layouts/default.yml"
+```
 
 ## Command-line options
 
