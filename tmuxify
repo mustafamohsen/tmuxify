@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 
 VERSION="2.5.3"
-REPO_URL="https://raw.githubusercontent.com/mustafamohsen/tmuxify/main/tmuxify"
+REPO_URL="${TMUXIFY_REPO_URL:-https://raw.githubusercontent.com/mustafamohsen/tmuxify/main/tmuxify}"
+EXAMPLES_ARCHIVE_URL="${TMUXIFY_EXAMPLES_ARCHIVE_URL:-https://github.com/mustafamohsen/tmuxify/archive/refs/heads/main.tar.gz}"
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+TMUXIFY_CONFIG_DIR="$CONFIG_HOME/tmuxify"
+GLOBAL_LAYOUTS_DIR="$TMUXIFY_CONFIG_DIR/layouts"
+GLOBAL_EXAMPLES_DIR="$GLOBAL_LAYOUTS_DIR/examples"
+GLOBAL_DEFAULT_CONFIG_FILE="$GLOBAL_LAYOUTS_DIR/default.yml"
 
 CUSTOM_CONFIG=""
 EXPORT_FLAG=0
@@ -100,13 +106,39 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+install_example_layouts() {
+  local archive temp_extract layouts_dir
+  command -v tar >/dev/null || { warn "tar is required to install example layouts; skipping examples."; return 0; }
+
+  mkdir -p "$GLOBAL_LAYOUTS_DIR" || die "Failed to create config layouts directory: $GLOBAL_LAYOUTS_DIR"
+  archive="$1"
+  temp_extract="$2"
+  mkdir -p "$temp_extract" || die "Failed to prepare example layout directory."
+
+  if ! tar -xzf "$archive" -C "$temp_extract" 2>/dev/null; then
+    warn "Could not extract example layouts from update archive; leaving existing examples unchanged."
+    return 0
+  fi
+  layouts_dir=$(find "$temp_extract" -path '*/examples/layouts' -type d | head -n 1)
+  if [ -z "$layouts_dir" ]; then
+    warn "Could not find example layouts in update archive; leaving existing examples unchanged."
+    return 0
+  fi
+
+  rm -rf "$GLOBAL_EXAMPLES_DIR"
+  mkdir -p "$GLOBAL_EXAMPLES_DIR" || die "Failed to create examples directory: $GLOBAL_EXAMPLES_DIR"
+  cp -R "$layouts_dir/." "$GLOBAL_EXAMPLES_DIR/" || die "Failed to install example layouts."
+  success "Example layouts installed to $GLOBAL_EXAMPLES_DIR"
+}
+
 safe_update() {
-  local temp_dir temp_file first_line candidate_version SCRIPT_PATH INSTALL_DIR INSTALL_PATH backup
+  local temp_dir temp_file examples_archive first_line candidate_version SCRIPT_PATH INSTALL_DIR INSTALL_PATH backup
   command -v curl >/dev/null || die "curl is required for --update."
 
   info "Downloading latest tmuxify..."
   temp_dir=$(mktemp -d 2>/dev/null || mktemp -d -t tmuxify-update) || die "Failed to create temporary directory."
   temp_file="$temp_dir/tmuxify"
+  examples_archive="$temp_dir/tmuxify-examples.tar.gz"
 
   if ! curl -fsSL "$REPO_URL" -o "$temp_file"; then
     rm -rf "$temp_dir"
@@ -126,6 +158,11 @@ safe_update() {
   fi
   chmod +x "$temp_file" || { rm -rf "$temp_dir"; die "Failed to mark downloaded candidate executable."; }
   candidate_version=$(sed -n 's/^VERSION="\([0-9][0-9.]*\)"$/\1/p' "$temp_file" | head -n 1)
+  info "Downloading latest example layouts..."
+  if ! curl -fsSL "$EXAMPLES_ARCHIVE_URL" -o "$examples_archive"; then
+    warn "Failed to download example layouts from $EXAMPLES_ARCHIVE_URL; continuing with script update."
+    examples_archive=""
+  fi
   [ -n "$candidate_version" ] || candidate_version="unknown"
 
   SCRIPT_PATH=$(command -v "$0" 2>/dev/null || printf '%s' "$0")
@@ -144,6 +181,10 @@ safe_update() {
 
   if mv "$temp_file" "$INSTALL_PATH" && chmod +x "$INSTALL_PATH"; then
     [ -e "$backup" ] && rm -f "$backup"
+    mkdir -p "$TMUXIFY_CONFIG_DIR" "$GLOBAL_LAYOUTS_DIR" || { rm -rf "$temp_dir"; die "Failed to create tmuxify config directories."; }
+    if [ -n "$examples_archive" ]; then
+      install_example_layouts "$examples_archive" "$temp_dir/examples"
+    fi
     rm -rf "$temp_dir"
     success "tmuxify updated successfully to version $candidate_version"
     exit 0
@@ -178,6 +219,13 @@ if [ -n "$CUSTOM_CONFIG" ]; then
   fi
   CONFIG_FILE="$CUSTOM_CONFIG"
   info "Using custom layout file: $CONFIG_FILE"
+elif [ -e "$DEFAULT_CONFIG_FILE" ]; then
+  [ -r "$DEFAULT_CONFIG_FILE" ] || die "Cannot read config file: $DEFAULT_CONFIG_FILE"
+  CONFIG_FILE="$DEFAULT_CONFIG_FILE"
+elif [ -e "$GLOBAL_DEFAULT_CONFIG_FILE" ]; then
+  [ -r "$GLOBAL_DEFAULT_CONFIG_FILE" ] || die "Cannot read config file: $GLOBAL_DEFAULT_CONFIG_FILE"
+  CONFIG_FILE="$GLOBAL_DEFAULT_CONFIG_FILE"
+  info "Using global default layout file: $CONFIG_FILE"
 else
   CONFIG_FILE="$DEFAULT_CONFIG_FILE"
 fi

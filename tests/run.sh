@@ -48,7 +48,7 @@ run_expect_failure() {
   printf '%s' "$output"
 }
 
-echo "1..9"
+echo "1..13"
 
 output=$(run_expect_success "$TMUXIFY" --help)
 assert_contains "$output" "--dry-run"
@@ -135,7 +135,8 @@ run_expect_success "$TMUXIFY" --file "$TMP_DIR/valid.yml" --detach --no-commands
 pane_count=$(tmux list-panes -t "${TEST_PREFIX}_nested" | wc -l | tr -d ' ')
 [[ "$pane_count" == "4" ]] || fail "expected 4 panes, got $pane_count"
 active_pane=$(tmux display-message -p -t "${TEST_PREFIX}_nested" '#{pane_index}')
-[[ "$active_pane" == "0" ]] || fail "expected editor pane to be active, got pane $active_pane"
+first_pane=$(tmux list-panes -t "${TEST_PREFIX}_nested" -F '#{pane_index}' | head -n 1)
+[[ "$active_pane" == "$first_pane" ]] || fail "expected editor pane to be active, got pane $active_pane"
 echo "ok 7 - detached nested session creates expected panes and focus"
 
 cat > "$TMP_DIR/base-index.yml" <<YAML
@@ -166,7 +167,80 @@ pane_indices=$(env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux list-panes -t 
 env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux kill-server >/dev/null 2>&1 || true
 echo "ok 8 - detached session works with tmux base-index 1"
 
+xdg_home="$TMP_DIR/xdg"
+global_project="$TMP_DIR/global-project"
+mkdir -p "$xdg_home/tmuxify/layouts" "$global_project"
+cat > "$xdg_home/tmuxify/layouts/default.yml" <<YAML
+session:
+  name: ${TEST_PREFIX}_global_default
+layout:
+  type: horizontal
+  splits:
+    - id: global_editor
+      size: 50%
+    - id: global_shell
+      size: 50%
+YAML
+output=$(run_expect_success env XDG_CONFIG_HOME="$xdg_home" bash -c 'cd "$1" && "$2" --dry-run' _ "$global_project" "$TMUXIFY")
+assert_contains "$output" "Using global default layout file"
+assert_contains "$output" "Session: ${TEST_PREFIX}_global_default"
+echo "ok 9 - global default layout is used when project config is absent"
+
+cat > "$global_project/.tmuxify.yml" <<YAML
+session:
+  name: ${TEST_PREFIX}_project_override
+layout:
+  type: horizontal
+  splits:
+    - id: project_editor
+      size: 50%
+    - id: project_shell
+      size: 50%
+YAML
+output=$(run_expect_success env XDG_CONFIG_HOME="$xdg_home" bash -c 'cd "$1" && "$2" --dry-run' _ "$global_project" "$TMUXIFY")
+assert_contains "$output" "Session: ${TEST_PREFIX}_project_override"
+echo "ok 10 - project layout overrides global default layout"
+
+cat > "$TMP_DIR/file-override.yml" <<YAML
+session:
+  name: ${TEST_PREFIX}_file_override
+layout:
+  type: horizontal
+  splits:
+    - id: file_editor
+      size: 50%
+    - id: file_shell
+      size: 50%
+YAML
+output=$(run_expect_success env XDG_CONFIG_HOME="$xdg_home" bash -c 'cd "$1" && "$2" --dry-run --file "$3"' _ "$global_project" "$TMUXIFY" "$TMP_DIR/file-override.yml")
+assert_contains "$output" "Session: ${TEST_PREFIX}_file_override"
+echo "ok 11 - explicit file layout overrides project and global layouts"
+
+update_install_dir="$TMP_DIR/update-install"
+update_xdg_home="$TMP_DIR/update-xdg"
+archive_root="$TMP_DIR/archive/tmuxify-main/examples/layouts"
+mkdir -p "$update_install_dir" "$archive_root"
+cp "$TMUXIFY" "$update_install_dir/tmuxify"
+chmod +x "$update_install_dir/tmuxify"
+cat > "$archive_root/example.yml" <<YAML
+session:
+  name: archive_example
+layout:
+  type: horizontal
+  splits:
+    - id: editor
+      size: 50%
+    - id: shell
+      size: 50%
+YAML
+(cd "$TMP_DIR/archive" && tar -czf "$TMP_DIR/examples.tar.gz" tmuxify-main)
+output=$(run_expect_success env XDG_CONFIG_HOME="$update_xdg_home" TMUXIFY_REPO_URL="file://$TMUXIFY" TMUXIFY_EXAMPLES_ARCHIVE_URL="file://$TMP_DIR/examples.tar.gz" "$update_install_dir/tmuxify" --update)
+assert_contains "$output" "Example layouts installed"
+[[ -d "$update_xdg_home/tmuxify/layouts" ]] || fail "expected update to create layouts directory"
+[[ -f "$update_xdg_home/tmuxify/layouts/examples/example.yml" ]] || fail "expected update to install example layouts"
+echo "ok 12 - update creates config folders and refreshes example layouts"
+
 while IFS= read -r example; do
   run_expect_success "$TMUXIFY" --dry-run --file "$example" >/dev/null
 done < <(find "$ROOT_DIR/examples/layouts" -type f -name '*.yml' -print | sort)
-echo "ok 9 - bundled examples validate"
+echo "ok 13 - bundled examples validate"
