@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.5.4] – 2026-06-07
+
+### Added
+- Added an XDG-compatible user config directory at `${XDG_CONFIG_HOME:-~/.config}/tmuxify`.
+- Added global default layout lookup at `${XDG_CONFIG_HOME:-~/.config}/tmuxify/layouts/default.yml` when no project `.tmuxify.yml` exists.
+- Added `tmuxify --update` support for creating config/layout directories and refreshing bundled examples under `layouts/examples/`.
+
+### Changed
+- Documented the new layout lookup priority and reusable user-level layout setup.
+
+### Tests
+- Added coverage for global default lookup, project and explicit-file precedence, update-time example refreshes, and pane-base-index-safe focus assertions.
+
 ## [2.5.3] – 2026-05-31
 
 ### Fixed

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="2.5.3"
+VERSION="2.5.4"
 REPO_URL="${TMUXIFY_REPO_URL:-https://raw.githubusercontent.com/mustafamohsen/tmuxify/main/tmuxify}"
 EXAMPLES_ARCHIVE_URL="${TMUXIFY_EXAMPLES_ARCHIVE_URL:-https://github.com/mustafamohsen/tmuxify/archive/refs/heads/main.tar.gz}"
 CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
