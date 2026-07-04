@@ -4,6 +4,10 @@
 
 Tmuxify turns a small layout file into a ready-to-use tmux session. It is designed for trusted developer workspaces: one command should create the panes, focus the right place, and run the commands you normally type by hand.
 
+## Documentation
+
+See the task-oriented docs in [`doc/README.md`](doc/README.md) for installation, usage, schema, examples, security, development, and troubleshooting.
+
 ## Features
 
 - **Declarative layouts:** Define nested pane structures with intuitive YAML.
