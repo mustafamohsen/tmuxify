@@ -48,7 +48,7 @@ run_expect_failure() {
   printf '%s' "$output"
 }
 
-echo "1..17"
+echo "1..18"
 
 output=$(run_expect_success "$TMUXIFY" --help)
 assert_contains "$output" "--dry-run"
@@ -301,7 +301,7 @@ active_pane=$(tmux display-message -p -t "${TEST_PREFIX}_one_window" '#{pane_id}
 first_pane=$(tmux list-panes -t "${TEST_PREFIX}_one_window" -F '#{pane_id}' | head -n 1)
 [[ "$active_pane" == "$first_pane" ]] || fail "expected window focus to select its first pane"
 
-for invalid_case in empty nonsequence mixed missing badid badname nolayout collision; do
+for invalid_case in empty nonsequence mixed missing badid badname nolayout collision duplicate_windows cross_window_collision; do
   case "$invalid_case" in
     empty) invalid_yaml='windows: []' ;;
     nonsequence) invalid_yaml='windows: invalid' ;;
@@ -311,6 +311,8 @@ for invalid_case in empty nonsequence mixed missing badid badname nolayout colli
     badname) invalid_yaml=$'windows:\n  - id: workspace\n    name: ""\n    layout:\n      type: horizontal\n      splits:\n        - id: editor' ;;
     nolayout) invalid_yaml=$'windows:\n  - id: workspace\n    name: Development' ;;
     collision) invalid_yaml=$'windows:\n  - id: workspace\n    name: Development\n    layout:\n      type: horizontal\n      splits:\n        - id: workspace' ;;
+    duplicate_windows) invalid_yaml=$'windows:\n  - id: shared\n    name: Development\n    layout:\n      type: horizontal\n      splits:\n        - id: editor\n  - id: shared\n    name: Operations\n    layout:\n      type: vertical\n      splits:\n        - id: monitor' ;;
+    cross_window_collision) invalid_yaml=$'windows:\n  - id: workspace\n    name: Development\n    layout:\n      type: horizontal\n      splits:\n        - id: shared\n  - id: shared\n    name: Operations\n    layout:\n      type: vertical\n      splits:\n        - id: monitor' ;;
   esac
   printf '%s\n' "$invalid_yaml" > "$TMP_DIR/one-window-${invalid_case}.yml"
   run_expect_failure "$TMUXIFY" --dry-run --file "$TMP_DIR/one-window-${invalid_case}.yml" >/dev/null
@@ -321,3 +323,70 @@ mkdir -p "$fallback_dir" "$fallback_xdg"
 output=$(run_expect_success env XDG_CONFIG_HOME="$fallback_xdg" bash -c 'cd "$1" && "$2" --dry-run' _ "$fallback_dir" "$TMUXIFY")
 assert_contains "$output" "default 4-pane workspace"
 echo "ok 17 - public CLI supports one explicit named window and rejects invalid schema forms"
+
+cat > "$TMP_DIR/multi-window.yml" <<YAML
+session:
+  name: ${TEST_PREFIX}_multi_window
+  initial_focus: logs
+windows:
+  - id: workspace
+    name: Development
+    layout:
+      type: horizontal
+      splits:
+        - id: editor
+          command: "printf editor > '$TMP_DIR/editor-command'"
+        - id: shell
+  - id: operations
+    name: Operations
+    layout:
+      type: vertical
+      splits:
+        - id: monitor
+        - type: horizontal
+          splits:
+            - id: logs
+              command: "printf logs > '$TMP_DIR/logs-command'; sleep 30"
+            - id: deploy
+YAML
+output=$(run_expect_success "$TMUXIFY" --dry-run --file "$TMP_DIR/multi-window.yml")
+assert_contains "$output" "Window: workspace (Development)"
+assert_contains "$output" "Window: operations (Operations)"
+assert_contains "$output" "command=printf editor"
+assert_contains "$output" "command=printf logs"
+run_expect_success "$TMUXIFY" --file "$TMP_DIR/multi-window.yml" --detach >/dev/null
+window_names=$(tmux list-windows -t "${TEST_PREFIX}_multi_window" -F '#{window_name}' | paste -sd, -)
+[[ "$window_names" == "Development,Operations" ]] || fail "expected windows in declaration order, got $window_names"
+pane_counts=$(tmux list-windows -t "${TEST_PREFIX}_multi_window" -F '#{window_id}' | while read -r window; do tmux list-panes -t "$window" -F '#{pane_id}' | wc -l | tr -d ' '; done | paste -sd, -)
+[[ "$pane_counts" == "2,3" ]] || fail "expected pane counts 2,3, got $pane_counts"
+for marker in editor-command logs-command; do
+  for _ in {1..20}; do [[ -f "$TMP_DIR/$marker" ]] && break; sleep 0.05; done
+  [[ -f "$TMP_DIR/$marker" ]] || fail "expected routed command marker $marker"
+done
+active_window=$(tmux display-message -p -t "${TEST_PREFIX}_multi_window" '#{window_name}')
+active_pane=$(tmux display-message -p -t "${TEST_PREFIX}_multi_window" '#{pane_id}')
+logs_pane=$(tmux list-panes -t "${TEST_PREFIX}_multi_window:Operations" -F '#{pane_id} #{pane_current_command}' | awk '$2 == "sleep" { print $1 }' | head -n 1)
+[[ "$active_window" == "Operations" ]] || fail "expected Operations focused, got $active_window"
+[[ -n "$logs_pane" && "$active_pane" == "$logs_pane" ]] || fail "expected configured logs pane focused"
+
+sed "s/${TEST_PREFIX}_multi_window/${TEST_PREFIX}_multi_window_safe/" "$TMP_DIR/multi-window.yml" > "$TMP_DIR/multi-window-safe.yml"
+rm -f "$TMP_DIR/editor-command" "$TMP_DIR/logs-command"
+run_expect_success "$TMUXIFY" --file "$TMP_DIR/multi-window-safe.yml" --detach --no-commands >/dev/null
+sleep 0.1
+[[ ! -e "$TMP_DIR/editor-command" && ! -e "$TMP_DIR/logs-command" ]] || fail "expected --no-commands to suppress commands in every window"
+
+sed -e '/initial_focus: logs/d' -e "s/${TEST_PREFIX}_multi_window/${TEST_PREFIX}_multi_window_default/" "$TMP_DIR/multi-window.yml" > "$TMP_DIR/multi-window-default.yml"
+run_expect_success "$TMUXIFY" --file "$TMP_DIR/multi-window-default.yml" --detach --no-commands >/dev/null
+default_window=$(tmux display-message -p -t "${TEST_PREFIX}_multi_window_default" '#{window_name}')
+default_active_pane=$(tmux display-message -p -t "${TEST_PREFIX}_multi_window_default" '#{pane_id}')
+default_first_pane=$(tmux list-panes -t "${TEST_PREFIX}_multi_window_default:Development" -F '#{pane_id}' | head -n 1)
+[[ "$default_window" == "Development" && "$default_active_pane" == "$default_first_pane" ]] || fail "expected omitted focus to restore first window and pane"
+
+sed -e 's/initial_focus: logs/initial_focus: operations/' -e "s/${TEST_PREFIX}_multi_window/${TEST_PREFIX}_multi_window_window_focus/" "$TMP_DIR/multi-window.yml" > "$TMP_DIR/multi-window-window-focus.yml"
+run_expect_success "$TMUXIFY" --file "$TMP_DIR/multi-window-window-focus.yml" --detach --no-commands >/dev/null
+window_focus_window=$(tmux display-message -p -t "${TEST_PREFIX}_multi_window_window_focus" '#{window_name}')
+window_focus_active_pane=$(tmux display-message -p -t "${TEST_PREFIX}_multi_window_window_focus" '#{pane_id}')
+window_focus_first_pane=$(tmux list-panes -t "${TEST_PREFIX}_multi_window_window_focus:Operations" -F '#{pane_id}' | head -n 1)
+[[ "$window_focus_window" == "Operations" && "$window_focus_active_pane" == "$window_focus_first_pane" ]] || fail "expected operations window ID to focus its first pane"
+
+echo "ok 18 - public CLI builds multiple windows, validates IDs, routes commands, and focuses across windows"

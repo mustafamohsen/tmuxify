@@ -1,6 +1,6 @@
 # Layout schema
 
-Tmuxify layouts are YAML files with an optional `session` object and either a legacy recursive `layout` object or a one-entry `windows` collection.
+Tmuxify layouts are YAML files with an optional `session` object and either a legacy recursive `layout` object or a non-empty `windows` collection.
 
 ## Minimal layout
 
@@ -26,9 +26,9 @@ layout:
 | `session.name` | No | tmux session name. If omitted, tmuxify uses the current directory name. Invalid tmux characters are sanitized. |
 | `session.initial_focus` | No | Window or pane `id` to focus after the layout is built. In legacy layouts it must match a pane ID. |
 | `layout` | One of `layout`/`windows` | Legacy root layout node. |
-| `windows` | One of `layout`/`windows` | One explicitly configured window (ticket #7). `layout` and `windows` cannot be combined. |
+| `windows` | One of `layout`/`windows` | One or more explicitly configured windows. `layout` and `windows` cannot be combined. |
 
-## Explicit window
+## Explicit windows
 
 ```yaml
 session:
@@ -42,9 +42,16 @@ windows:
       splits:
         - id: editor
         - id: shell
+  - id: operations
+    name: Operations
+    layout:
+      type: vertical
+      splits:
+        - id: logs
+        - id: monitor
 ```
 
-The window requires a stable `id`, a non-empty visible `name`, and a recursive `layout`. Window and pane IDs share one unique namespace and the same ID syntax. Focusing the window ID—or omitting focus—selects its first pane; focusing a pane ID selects that pane. Existing top-level `layout` files remain unchanged. An explicit empty `windows` value is invalid.
+Each window requires a stable `id`, a non-empty visible `name`, and a recursive `layout`. Windows are created in declaration order, and each window's layout is built independently. Window and pane IDs share one unique namespace and the same ID syntax. Focusing a window ID selects that window's first pane; focusing a pane ID selects its containing window and that pane. When focus is omitted, tmuxify selects the first pane of the first declared window. Existing top-level `layout` files remain unchanged. An explicit empty `windows` value is invalid.
 
 ## Layout nodes
 
@@ -101,7 +108,7 @@ layout:
 `tmuxify --dry-run --file layout.yml` checks that:
 
 - YAML parses with Mike Farah `yq` v4.
-- exactly one of `.layout` or `.windows` exists; `.windows` is a one-entry sequence with a valid ID, non-empty string name, and layout.
+- Exactly one of `.layout` or `.windows` exists; `.windows` is a non-empty sequence of entries with a valid ID, non-empty string name, and layout.
 - Every layout node has `type: horizontal` or `type: vertical`.
 - Every layout node has a non-empty `splits` array.
 - `size` values are percentages from `1%` through `100%`.
