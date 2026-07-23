@@ -10,10 +10,10 @@ See the task-oriented docs in [`doc/README.md`](doc/README.md) for installation,
 
 ## Features
 
-- **Declarative layouts:** Define nested pane structures with intuitive YAML.
+- **Declarative layouts:** Define one or multiple windows with nested pane structures in intuitive YAML.
 - **Smart session management:** Reattach to an existing session or create a new one from the current directory.
 - **Zero-config default:** Run `tmuxify` in any directory to get a useful four-pane workspace.
-- **Initial focus:** Start in the pane you care about most.
+- **Initial focus:** Start in the window or pane you care about most.
 - **Safe preview:** Use `--dry-run` to validate and inspect a layout without touching tmux.
 - **Command control:** Use `--no-commands` when you want panes created without running layout commands.
 - **Detached mode:** Use `--detach` for scripts, CI, or remote setup flows.
@@ -169,15 +169,9 @@ This creates:
 
 ### Schema rules
 
-Tmuxify validates the layout before creating a session:
+A file contains exactly one of the backward-compatible top-level `layout` form shown above or a non-empty `windows` sequence. Each explicit window requires `id`, visible `name`, and `layout`; entries are created in order. Window and pane IDs use one globally unique namespace. `session.initial_focus` accepts a window ID (its first pane) or pane ID (that exact pane), defaulting to the first window's first pane. Visible names are not IDs.
 
-- `layout` must be an object.
-- Every layout node needs `type: horizontal` or `type: vertical`.
-- Every layout node needs a non-empty `splits` array.
-- Pane IDs are optional, but when present they must be unique and use letters, numbers, underscores, or dashes, starting with a letter.
-- `session.initial_focus`, when present, must match a pane ID.
-- `size`, when present, must be `1%` through `100%`.
-- `command`, when present, must be a string.
+An empty `windows`, mixed `layout`/`windows`, invalid or duplicate IDs, unresolved focus, malformed recursive nodes, invalid sizes, and non-string commands are rejected before session creation. See the authoritative [layout schema](doc/layout-schema.md), including one- and multi-window examples and compatibility details.
 
 ## Example layouts
 
@@ -212,12 +206,12 @@ tmuxify --file examples/layouts/golang-dev.yml
 Contributions are welcome and appreciated.
 
 - Include your OS, shell, tmux version, and yq version in bug reports.
-- Run `shellcheck tmuxify` and `tests/run.sh` before opening a pull request.
+- Run `shellcheck tmuxify tests/run.sh` and `tests/run.sh` before opening a pull request.
 - Add or update example layouts with `tmuxify --dry-run --file <layout>` validation.
 
 ## Backward compatibility
 
-Tmuxify v2+ uses the recursive layout format shown above and still provides a useful default layout for projects without `.tmuxify.yml`.
+Tmuxify v2+ uses recursive layouts and still provides a useful default when no configuration is selected. Version 2.6.0 adds explicit one/multiple-window layouts without removing or deprecating legacy top-level `layout` files; existing valid files require no migration.
 
 ## License
 

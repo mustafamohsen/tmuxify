@@ -1,0 +1,30 @@
+session:
+  name: multi-window-development
+  # Change this to `tests` to demonstrate window focus instead.
+  initial_focus: editor
+
+windows:
+  - id: workspace
+    name: Development
+    layout:
+      type: horizontal
+      splits:
+        - id: editor
+          size: 65%
+          command: 'command -v "${EDITOR:-vi}" >/dev/null 2>&1 && "${EDITOR:-vi}" . || echo "Set EDITOR to open the project"'
+        - type: vertical
+          size: 35%
+          splits:
+            - id: shell
+              command: 'clear; printf "%s\n" "Development shell ready"'
+            - id: status
+              command: 'git status --short 2>/dev/null || echo "Not a Git repository"'
+  - id: tests
+    name: Tests & Logs
+    layout:
+      type: vertical
+      splits:
+        - id: test_runner
+          command: 'printf "%s\n" "Review and start your project test command here"'
+        - id: logs
+          command: 'printf "%s\n" "Logs pane ready (no files are tailed automatically)"'

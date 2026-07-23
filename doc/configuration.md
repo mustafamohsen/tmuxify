@@ -82,4 +82,8 @@ command: command -v lazygit >/dev/null && lazygit || git status
 command: clear && echo "Manual pane: start the service when ready"
 ```
 
-Use `--no-commands` to create panes while skipping all configured commands.
+All windows and panes are constructed before any configured command is dispatched. Use `--dry-run` to validate and print the complete window-grouped plan without creating a session. Use `--no-commands` to create every configured window and pane while skipping all commands. `--detach` changes only attachment behavior; construction and final focus are the same.
+
+## Compatibility and migration
+
+Version 2.6.0 adds `windows` without removing or deprecating top-level `layout`. Existing valid single-window files need no changes. Adopt explicit windows only when you need named or multiple windows; a one-entry `windows` sequence is also useful when you want a stable window focus ID. Do not combine the forms, and do not translate pane focus IDs to visible window names.

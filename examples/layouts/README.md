@@ -33,6 +33,7 @@ These are the best first layouts to copy into a project as `.tmuxify.yml`:
 | `basic-3-pane.yml` | Editor + Git + shell | Falls back to `git status` if `lazygit` is unavailable. |
 | `classic-4-pane.yml` | Editor + assistant/scratch + Git + terminal | Assistant pane is intentionally manual. |
 | `fullstack-dev.yml` | Monorepo with `backend/` and `frontend/` | Runs guarded backend/frontend dev panes. |
+| `multi-window-development.yml` | Two-window development workspace | Nested panes, pane focus, and safe/manual test and log commands. Change focus to `tests` to demonstrate window focus. |
 
 ## Development layouts
 

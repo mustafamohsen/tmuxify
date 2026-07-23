@@ -196,6 +196,7 @@ layout:
     - id: global_shell
       size: 50%
 YAML
+# shellcheck disable=SC2016 # Positional parameters intentionally expand in the child bash.
 output=$(run_expect_success env XDG_CONFIG_HOME="$xdg_home" bash -c 'cd "$1" && "$2" --dry-run' _ "$global_project" "$TMUXIFY")
 assert_contains "$output" "Using global default layout file"
 assert_contains "$output" "Session: ${TEST_PREFIX}_global_default"
@@ -212,6 +213,7 @@ layout:
     - id: project_shell
       size: 50%
 YAML
+# shellcheck disable=SC2016 # Positional parameters intentionally expand in the child bash.
 output=$(run_expect_success env XDG_CONFIG_HOME="$xdg_home" bash -c 'cd "$1" && "$2" --dry-run' _ "$global_project" "$TMUXIFY")
 assert_contains "$output" "Session: ${TEST_PREFIX}_project_override"
 echo "ok 11 - project layout overrides global default layout"
@@ -227,6 +229,7 @@ layout:
     - id: file_shell
       size: 50%
 YAML
+# shellcheck disable=SC2016 # Positional parameters intentionally expand in the child bash.
 output=$(run_expect_success env XDG_CONFIG_HOME="$xdg_home" bash -c 'cd "$1" && "$2" --dry-run --file "$3"' _ "$global_project" "$TMUXIFY" "$TMP_DIR/file-override.yml")
 assert_contains "$output" "Session: ${TEST_PREFIX}_file_override"
 echo "ok 12 - explicit file layout overrides project and global layouts"
@@ -261,6 +264,7 @@ assert_contains "$output" "Completions installed"
 [[ -f "$update_xdg_home/tmuxify/completions/_tmuxify" ]] || fail "expected update to install zsh completions"
 echo "ok 13 - update creates config folders and refreshes examples and completions"
 
+# shellcheck disable=SC2016 # Positional parameters intentionally expand in the child bash.
 output=$(run_expect_success env XDG_CONFIG_HOME="$update_xdg_home" bash -c 'cd "$1" && "$2" --list-layouts' _ "$global_project" "$TMUXIFY")
 assert_contains "$output" "Available tmuxify layouts"
 assert_contains "$output" "project"
@@ -323,6 +327,7 @@ done
 fallback_dir="$TMP_DIR/fallback"
 fallback_xdg="$TMP_DIR/fallback-xdg"
 mkdir -p "$fallback_dir" "$fallback_xdg"
+# shellcheck disable=SC2016 # Positional parameters intentionally expand in the child bash.
 output=$(run_expect_success env XDG_CONFIG_HOME="$fallback_xdg" bash -c 'cd "$1" && "$2" --dry-run' _ "$fallback_dir" "$TMUXIFY")
 assert_contains "$output" "default 4-pane workspace"
 echo "ok 17 - public CLI supports one explicit named window and rejects invalid schema forms"

@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.6.0] – 2026-07-23
+
+### Added
+- Added explicit one- and multi-window layout configuration with required stable window IDs, visible names, recursive layouts, declaration-order creation, and session-wide pane/window focus.
+- Added a safe bundled multi-window development example and authoritative schema, command-control, migration, export, troubleshooting, and development-check documentation.
+
+### Changed
+- Expanded simplified export to enumerate every window, preserve order and visible names, generate safe unique IDs, and represent active focus while retaining atomic overwrite/symlink protections.
+- Kept legacy top-level `layout` files and the no-config built-in workspace fully supported; explicit empty windows and mixed legacy/window schemas are rejected.
+- Made multi-window construction transactional, native-ID based, and structure-first so custom indexes/renumbering are safe and commands run only after all windows and panes exist.
+
+### Tests
+- Added integration coverage for schema validation, legacy/one/multiple-window runtime behavior, focus, command controls, custom indexes, rollback, complete export, and bundled-example validation.
+- Verified Bash syntax, ShellCheck, the full integration suite, and all-example public dry runs for release preparation.
+
 ## [2.5.6] – 2026-06-07
 
 ### Added

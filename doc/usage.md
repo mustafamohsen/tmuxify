@@ -93,4 +93,10 @@ tmuxify --export
 tmuxify --export my-layout.yml
 ```
 
-Export writes a simplified starter layout and refuses to overwrite existing files or symlinks.
+Export enumerates every window in deterministic tmux order, preserves visible window names, generates unique window/pane IDs, and records the active pane as `session.initial_focus`. User-controlled names are YAML encoded safely. It retains atomic-write and existing-file/symlink protections.
+
+The result is a simplified starter template, not a backup: export does not recover commands, shell state/history, working directories, environment, or exact pane geometry. Review and adapt the generated file, then validate it with `tmuxify --dry-run --file <file>`.
+
+## Existing sessions and creation failures
+
+If the named session already exists, tmuxify attaches or switches without reconciling or mutating its windows. For a newly created workspace, schema validation happens before tmux changes; if later structural window/pane construction fails, tmuxify removes that partial new session. Successfully dispatched pane programs and their later exit status are not monitored or rolled back.
