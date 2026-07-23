@@ -442,19 +442,47 @@ validate_layout_node() {
 }
 
 validate_config() {
+  local has_layout has_windows windows_type window_count window_id window_name window_name_type
   [ -f "$CONFIG_FILE" ] || return 0
   if ! yq eval '.' "$CONFIG_FILE" >/dev/null 2>&1; then
     die "Invalid YAML syntax in $CONFIG_FILE"
   fi
-  layout_root_type=$(yq -r '.layout | type' "$CONFIG_FILE")
-  [ "$layout_root_type" = "!!map" ] || die "Missing required layout object in $CONFIG_FILE"
+  has_layout=$(yq -r 'has("layout")' "$CONFIG_FILE")
+  has_windows=$(yq -r 'has("windows")' "$CONFIG_FILE")
+  [ "$has_layout" != "true" ] || [ "$has_windows" != "true" ] || die "Configuration cannot contain both layout and windows."
+  [ "$has_layout" = "true" ] || [ "$has_windows" = "true" ] || die "Configuration must contain either a layout object or a windows collection."
+
   init_tmp_dir
   : > "$TMP_DIR/seen_ids"
-  validate_layout_node ".layout"
+  if [ "$has_windows" = "true" ]; then
+    windows_type=$(yq -r '.windows | type' "$CONFIG_FILE")
+    [ "$windows_type" = "!!seq" ] || die "windows must be a non-empty sequence."
+    window_count=$(yq -r '.windows | length' "$CONFIG_FILE")
+    [ "$window_count" -eq 1 ] 2>/dev/null || die "windows must contain exactly one entry."
+    window_id=$(yq -r '.windows[0].id // ""' "$CONFIG_FILE")
+    [ -n "$window_id" ] || die "Missing required window id at .windows[0].id."
+    if ! printf '%s' "$window_id" | grep -Eq '^[A-Za-z][A-Za-z0-9_-]*$'; then
+      die "Invalid window id '$window_id' at .windows[0].id. Use letters, numbers, underscores, and dashes; start with a letter."
+    fi
+    printf '%s\n' "$window_id" >> "$TMP_DIR/seen_ids"
+    window_name_type=$(yq -r '.windows[0].name | type' "$CONFIG_FILE")
+    window_name=$(yq -r '.windows[0].name // ""' "$CONFIG_FILE")
+    if [ "$window_name_type" != "!!str" ] || [ -z "$window_name" ]; then
+      die "Window name at .windows[0].name must be a non-empty string."
+    fi
+    validate_layout_node ".windows[0].layout"
+  else
+    layout_root_type=$(yq -r '.layout | type' "$CONFIG_FILE")
+    [ "$layout_root_type" = "!!map" ] || die "Missing required layout object in $CONFIG_FILE"
+    validate_layout_node ".layout"
+  fi
 
   initial_focus=$(yq -r '.session.initial_focus // ""' "$CONFIG_FILE")
   if [ -n "$initial_focus" ] && [ "$initial_focus" != "null" ]; then
     if ! grep -Fqx "$initial_focus" "$TMP_DIR/seen_ids"; then
+      if [ "$has_windows" = "true" ]; then
+        die "session.initial_focus '$initial_focus' does not match any window or pane id."
+      fi
       die "session.initial_focus '$initial_focus' does not match any pane id."
     fi
   fi
@@ -582,7 +610,12 @@ if [ "$DRY_RUN" -eq 1 ]; then
   printf 'Session: %s\n' "$session_name"
   if [ -f "$CONFIG_FILE" ]; then
     printf 'Layout plan:\n'
-    print_plan_node ".layout" "  "
+    if [ "$(yq -r 'has("windows")' "$CONFIG_FILE")" = "true" ]; then
+      printf '  Window: %s (%s)\n' "$(yq -r '.windows[0].id' "$CONFIG_FILE")" "$(yq -r '.windows[0].name' "$CONFIG_FILE")"
+      print_plan_node ".windows[0].layout" "    "
+    else
+      print_plan_node ".layout" "  "
+    fi
   else
     printf 'Layout plan:\n  - default 4-pane workspace\n'
   fi
@@ -742,7 +775,16 @@ SESSION_CREATED=1
 info "Building layout from $CONFIG_FILE..."
 tmux_or_die tmux set-window-option -t "$session_name" aggressive-resize on
 root_pane=$(tmux display-message -t "$session_name" -p '#{pane_id}') || die "Failed to identify initial pane."
-build_layout ".layout" "$root_pane"
+layout_path=".layout"
+window_id=""
+if [ "$(yq -r 'has("windows")' "$CONFIG_FILE")" = "true" ]; then
+  layout_path=".windows[0].layout"
+  window_id=$(yq -r '.windows[0].id' "$CONFIG_FILE")
+  window_name=$(yq -r '.windows[0].name' "$CONFIG_FILE")
+  root_window=$(tmux display-message -t "$root_pane" -p '#{window_id}') || die "Failed to identify initial window."
+  tmux_or_die tmux rename-window -t "$root_window" "$window_name"
+fi
+build_layout "$layout_path" "$root_pane"
 
 initial_focus=$(yq -r '.session.initial_focus // ""' "$CONFIG_FILE")
 if [ -n "$initial_focus" ] && [ "$initial_focus" != "null" ]; then
@@ -750,8 +792,11 @@ if [ -n "$initial_focus" ] && [ "$initial_focus" != "null" ]; then
   if [ -n "$focus_pane" ]; then
     info "Setting initial focus to pane ID '$initial_focus'."
     tmux_or_die tmux select-pane -t "$focus_pane"
+  elif [ -n "$window_id" ] && [ "$initial_focus" = "$window_id" ]; then
+    info "Setting initial focus to window ID '$initial_focus'."
+    tmux_or_die tmux select-pane -t "$root_pane"
   else
-    warn "Initial focus pane ID '$initial_focus' not found. Focusing first pane."
+    warn "Initial focus ID '$initial_focus' not found. Focusing first pane."
     tmux_or_die tmux select-pane -t "$root_pane"
   fi
 else

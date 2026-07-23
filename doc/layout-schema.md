@@ -1,6 +1,6 @@
 # Layout schema
 
-Tmuxify layouts are YAML files with an optional `session` object and a required recursive `layout` object.
+Tmuxify layouts are YAML files with an optional `session` object and either a legacy recursive `layout` object or a one-entry `windows` collection.
 
 ## Minimal layout
 
@@ -24,8 +24,27 @@ layout:
 | Key | Required | Description |
 |---|---:|---|
 | `session.name` | No | tmux session name. If omitted, tmuxify uses the current directory name. Invalid tmux characters are sanitized. |
-| `session.initial_focus` | No | Pane `id` to focus after the layout is built. Must match an existing pane id. |
-| `layout` | Yes | Root layout node. |
+| `session.initial_focus` | No | Window or pane `id` to focus after the layout is built. In legacy layouts it must match a pane ID. |
+| `layout` | One of `layout`/`windows` | Legacy root layout node. |
+| `windows` | One of `layout`/`windows` | One explicitly configured window (ticket #7). `layout` and `windows` cannot be combined. |
+
+## Explicit window
+
+```yaml
+session:
+  name: my-project
+  initial_focus: workspace
+windows:
+  - id: workspace
+    name: Development
+    layout:
+      type: horizontal
+      splits:
+        - id: editor
+        - id: shell
+```
+
+The window requires a stable `id`, a non-empty visible `name`, and a recursive `layout`. Window and pane IDs share one unique namespace and the same ID syntax. Focusing the window ID—or omitting focus—selects its first pane; focusing a pane ID selects that pane. Existing top-level `layout` files remain unchanged. An explicit empty `windows` value is invalid.
 
 ## Layout nodes
 
@@ -82,10 +101,10 @@ layout:
 `tmuxify --dry-run --file layout.yml` checks that:
 
 - YAML parses with Mike Farah `yq` v4.
-- `.layout` exists and is an object.
+- exactly one of `.layout` or `.windows` exists; `.windows` is a one-entry sequence with a valid ID, non-empty string name, and layout.
 - Every layout node has `type: horizontal` or `type: vertical`.
 - Every layout node has a non-empty `splits` array.
 - `size` values are percentages from `1%` through `100%`.
 - `command` values are strings.
-- Pane IDs are valid and unique.
-- `session.initial_focus` points at an existing pane ID.
+- Window and pane IDs are valid and unique in one shared namespace.
+- `session.initial_focus` points at an existing window or pane ID (or an existing pane ID for legacy layouts).

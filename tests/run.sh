@@ -48,7 +48,7 @@ run_expect_failure() {
   printf '%s' "$output"
 }
 
-echo "1..16"
+echo "1..17"
 
 output=$(run_expect_success "$TMUXIFY" --help)
 assert_contains "$output" "--dry-run"
@@ -272,3 +272,52 @@ echo "ok 15 - bundled examples validate"
 
 run_expect_success env PATH="/usr/bin:/bin" "$TMUXIFY" --completion-options >/dev/null
 echo "ok 16 - completion metadata does not require optional dependencies"
+
+cat > "$TMP_DIR/one-window.yml" <<YAML
+session:
+  name: ${TEST_PREFIX}_one_window
+  initial_focus: workspace
+windows:
+  - id: workspace
+    name: Development
+    layout:
+      type: horizontal
+      splits:
+        - id: editor
+          size: 60%
+        - id: shell
+          size: 40%
+YAML
+output=$(run_expect_success "$TMUXIFY" --dry-run --file "$TMP_DIR/one-window.yml")
+assert_contains "$output" "Window: workspace (Development)"
+run_expect_success "$TMUXIFY" --file "$TMP_DIR/one-window.yml" --detach --no-commands >/dev/null
+window_count=$(tmux list-windows -t "${TEST_PREFIX}_one_window" | wc -l | tr -d ' ')
+[[ "$window_count" == "1" ]] || fail "expected one configured window, got $window_count"
+window_name=$(tmux display-message -p -t "${TEST_PREFIX}_one_window" '#{window_name}')
+[[ "$window_name" == "Development" ]] || fail "expected configured window name Development, got $window_name"
+pane_count=$(tmux list-panes -t "${TEST_PREFIX}_one_window" | wc -l | tr -d ' ')
+[[ "$pane_count" == "2" ]] || fail "expected 2 panes in configured window, got $pane_count"
+active_pane=$(tmux display-message -p -t "${TEST_PREFIX}_one_window" '#{pane_id}')
+first_pane=$(tmux list-panes -t "${TEST_PREFIX}_one_window" -F '#{pane_id}' | head -n 1)
+[[ "$active_pane" == "$first_pane" ]] || fail "expected window focus to select its first pane"
+
+for invalid_case in empty nonsequence mixed missing badid badname nolayout collision; do
+  case "$invalid_case" in
+    empty) invalid_yaml='windows: []' ;;
+    nonsequence) invalid_yaml='windows: invalid' ;;
+    mixed) invalid_yaml=$'layout:\n  type: horizontal\n  splits:\n    - id: editor\nwindows:\n  - id: workspace\n    name: Development\n    layout:\n      type: horizontal\n      splits:\n        - id: shell' ;;
+    missing) invalid_yaml=$'session:\n  name: invalid' ;;
+    badid) invalid_yaml=$'windows:\n  - id: 1bad\n    name: Development\n    layout:\n      type: horizontal\n      splits:\n        - id: editor' ;;
+    badname) invalid_yaml=$'windows:\n  - id: workspace\n    name: ""\n    layout:\n      type: horizontal\n      splits:\n        - id: editor' ;;
+    nolayout) invalid_yaml=$'windows:\n  - id: workspace\n    name: Development' ;;
+    collision) invalid_yaml=$'windows:\n  - id: workspace\n    name: Development\n    layout:\n      type: horizontal\n      splits:\n        - id: workspace' ;;
+  esac
+  printf '%s\n' "$invalid_yaml" > "$TMP_DIR/one-window-${invalid_case}.yml"
+  run_expect_failure "$TMUXIFY" --dry-run --file "$TMP_DIR/one-window-${invalid_case}.yml" >/dev/null
+done
+fallback_dir="$TMP_DIR/fallback"
+fallback_xdg="$TMP_DIR/fallback-xdg"
+mkdir -p "$fallback_dir" "$fallback_xdg"
+output=$(run_expect_success env XDG_CONFIG_HOME="$fallback_xdg" bash -c 'cd "$1" && "$2" --dry-run' _ "$fallback_dir" "$TMUXIFY")
+assert_contains "$output" "default 4-pane workspace"
+echo "ok 17 - public CLI supports one explicit named window and rejects invalid schema forms"
