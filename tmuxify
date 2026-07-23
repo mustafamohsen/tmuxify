@@ -25,7 +25,14 @@ SESSION_CREATED=0
 info() { printf '%s\n' "ℹ️ $*"; }
 success() { printf '%s\n' "✅ $*"; }
 warn() { printf '%s\n' "⚠️ $*"; }
-die() { printf '%s\n' "❌ Error: $*" >&2; exit 1; }
+die() {
+  if [ "${SESSION_CREATED:-0}" -eq 1 ] && [ -n "${session_name:-}" ]; then
+    tmux kill-session -t "=$session_name" 2>/dev/null || true
+    SESSION_CREATED=0
+  fi
+  printf '%s\n' "❌ Error: $*" >&2
+  exit 1
+}
 
 usage() {
   cat <<'EOF'
@@ -664,9 +671,6 @@ fi
 
 tmux_or_die() {
   if ! "$@"; then
-    if [ "$SESSION_CREATED" -eq 1 ]; then
-      tmux kill-session -t "$session_name" 2>/dev/null || true
-    fi
     die "Command failed: $*"
   fi
 }
@@ -720,10 +724,8 @@ build_layout() {
       else
         split_flag="-v"
       fi
-      current_pane=$(tmux split-window "$split_flag" -t "$prev_pane" -c "$WORKDIR" -P -F '#{pane_id}') || {
-        tmux kill-session -t "$session_name" 2>/dev/null || true
+      current_pane=$(tmux split-window "$split_flag" -t "$prev_pane" -c "$WORKDIR" -P -F '#{pane_id}') ||
         die "Failed to split pane $prev_pane while building $layout_path."
-      }
       previous_item_path="$layout_path.splits[$((i - 1))]"
       previous_size=$(yq -r "$previous_item_path.size // \"\"" "$CONFIG_FILE")
       apply_size "$layout_type" "$prev_pane" "$previous_size"
@@ -802,10 +804,8 @@ if [ "$(yq -r 'has("windows")' "$CONFIG_FILE")" = "true" ]; then
       native_window=$(tmux display-message -t "$window_pane" -p '#{window_id}') || die "Failed to identify initial window."
       tmux_or_die tmux rename-window -t "$native_window" "$window_name"
     else
-      window_result=$(tmux new-window -d -t "$session_name" -c "$WORKDIR" -n "$window_name" -P -F '#{window_id} #{pane_id}') || {
-        tmux kill-session -t "$session_name" 2>/dev/null || true
+      window_result=$(tmux new-window -d -t "$session_name" -c "$WORKDIR" -n "$window_name" -P -F '#{window_id} #{pane_id}') ||
         die "Failed to create configured window '$window_id'."
-      }
       native_window=${window_result%% *}
       window_pane=${window_result#* }
     fi

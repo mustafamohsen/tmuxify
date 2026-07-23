@@ -13,7 +13,10 @@ cleanup() {
   if [ -d "/tmp/${TEST_PREFIX}_base_index_sock" ]; then
     env -u TMUX TMUX_TMPDIR="/tmp/${TEST_PREFIX}_base_index_sock" tmux kill-server >/dev/null 2>&1 || true
   fi
-  rm -rf "$TMP_DIR" "/tmp/${TEST_PREFIX}_base_index_sock"
+  if [ -d "/tmp/${TEST_PREFIX}_portable_sock" ]; then
+    env -u TMUX TMUX_TMPDIR="/tmp/${TEST_PREFIX}_portable_sock" tmux kill-server >/dev/null 2>&1 || true
+  fi
+  rm -rf "$TMP_DIR" "/tmp/${TEST_PREFIX}_base_index_sock" "/tmp/${TEST_PREFIX}_portable_sock"
 }
 trap cleanup EXIT
 
@@ -48,7 +51,7 @@ run_expect_failure() {
   printf '%s' "$output"
 }
 
-echo "1..18"
+echo "1..19"
 
 output=$(run_expect_success "$TMUXIFY" --help)
 assert_contains "$output" "--dry-run"
@@ -390,3 +393,70 @@ window_focus_first_pane=$(tmux list-panes -t "${TEST_PREFIX}_multi_window_window
 [[ "$window_focus_window" == "Operations" && "$window_focus_active_pane" == "$window_focus_first_pane" ]] || fail "expected operations window ID to focus its first pane"
 
 echo "ok 18 - public CLI builds multiple windows, validates IDs, routes commands, and focuses across windows"
+
+portable_sockdir="/tmp/${TEST_PREFIX}_portable_sock"
+mkdir -p "$portable_sockdir"
+env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux new-session -d -s "${TEST_PREFIX}_server_keepalive"
+env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux set-window-option -g base-index 4
+env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux set-window-option -g pane-base-index 3
+env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux set-option -g renumber-windows on
+cat > "$TMP_DIR/portable.yml" <<YAML
+session:
+  name: ${TEST_PREFIX}_portable
+  initial_focus: second-pane
+windows:
+  - id: first
+    name: Repeated
+    layout:
+      type: horizontal
+      splits:
+        - id: first-pane
+        - id: first-shell
+          command: "tmux list-windows -t ${TEST_PREFIX}_portable -F '#{window_id}' > '$TMP_DIR/command-windows'; tmux list-panes -a -F '#{session_name}' > '$TMP_DIR/command-panes'"
+  - id: second
+    name: Repeated
+    layout:
+      type: vertical
+      splits:
+        - id: second-shell
+        - id: second-pane
+YAML
+run_expect_success env -u TMUX TMUX_TMPDIR="$portable_sockdir" "$TMUXIFY" --file "$TMP_DIR/portable.yml" --detach >/dev/null
+portable_windows=$(env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux list-windows -t "${TEST_PREFIX}_portable" -F '#{window_index}' | paste -sd, -)
+[[ "$portable_windows" == "4,5" ]] || fail "expected portable window indexes 4,5, got $portable_windows"
+portable_panes=$(env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux list-panes -a -F '#{session_name} #{pane_index}' | awk -v session="${TEST_PREFIX}_portable" '$1 == session { print $2 }' | sort -n | paste -sd, -)
+[[ "$portable_panes" == "3,3,4,4" ]] || fail "expected pane base indexes per window, got $portable_panes"
+portable_active_window=$(env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux display-message -p -t "${TEST_PREFIX}_portable" '#{window_index}')
+portable_active_pane=$(env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux display-message -p -t "${TEST_PREFIX}_portable" '#{pane_index}')
+[[ "$portable_active_window" == "5" && "$portable_active_pane" == "4" ]] || fail "expected native-ID focus at 5.4, got $portable_active_window.$portable_active_pane"
+for _ in {1..100}; do [[ -f "$TMP_DIR/command-panes" ]] && break; sleep 0.05; done
+[[ -f "$TMP_DIR/command-windows" && -f "$TMP_DIR/command-panes" ]] || fail "expected configured structure-check command to run"
+[[ "$(wc -l < "$TMP_DIR/command-windows" | tr -d ' ')" == "2" ]] || fail "expected command to observe both windows"
+command_pane_count=$(grep -c "^${TEST_PREFIX}_portable$" "$TMP_DIR/command-panes")
+[[ "$command_pane_count" == "4" ]] || fail "expected command to observe all four panes, got $command_pane_count"
+
+env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux kill-session -t "${TEST_PREFIX}_portable"
+mkdir -p "$TMP_DIR/failing-bin"
+real_tmux=$(command -v tmux)
+cat > "$TMP_DIR/failing-bin/tmux" <<'SH'
+#!/usr/bin/env bash
+if [[ "$1" == "display-message" && -n "${TMUXIFY_FAIL_MARKER:-}" && ! -e "$TMUXIFY_FAIL_MARKER" ]]; then
+  : > "$TMUXIFY_FAIL_MARKER"
+  exit 1
+fi
+exec "$TMUXIFY_REAL_TMUX" "$@"
+SH
+chmod +x "$TMP_DIR/failing-bin/tmux"
+output=$(run_expect_failure env -u TMUX TMUX_TMPDIR="$portable_sockdir" PATH="$TMP_DIR/failing-bin:$PATH" TMUXIFY_REAL_TMUX="$real_tmux" TMUXIFY_FAIL_MARKER="$TMP_DIR/failure-fired" "$TMUXIFY" --file "$TMP_DIR/portable.yml" --detach --no-commands)
+[[ -f "$TMP_DIR/failure-fired" ]] || fail "expected deterministic tmux failure to fire"
+if env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux has-session -t "${TEST_PREFIX}_portable" 2>/dev/null; then
+  fail "expected failed construction to remove partial session"
+fi
+env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux has-session -t "${TEST_PREFIX}_server_keepalive" 2>/dev/null || fail "cleanup removed an unrelated existing session"
+env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux new-session -d -s "${TEST_PREFIX}_portable" -n Existing
+run_expect_success env -u TMUX TMUX_TMPDIR="$portable_sockdir" "$TMUXIFY" --file "$TMP_DIR/portable.yml" --detach --no-commands >/dev/null
+existing_windows=$(env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux list-windows -t "${TEST_PREFIX}_portable" -F '#{window_name}')
+[[ "$existing_windows" == "Existing" ]] || fail "expected matching existing session to remain unmodified"
+env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux kill-server >/dev/null 2>&1 || true
+rm -rf "$portable_sockdir"
+echo "ok 19 - portable construction is transactional and dispatches commands after structure"
