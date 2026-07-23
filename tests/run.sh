@@ -51,7 +51,7 @@ run_expect_failure() {
   printf '%s' "$output"
 }
 
-echo "1..19"
+echo "1..20"
 
 output=$(run_expect_success "$TMUXIFY" --help)
 assert_contains "$output" "--dry-run"
@@ -460,3 +460,53 @@ existing_windows=$(env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux list-windows
 env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux kill-server >/dev/null 2>&1 || true
 rm -rf "$portable_sockdir"
 echo "ok 19 - portable construction is transactional and dispatches commands after structure"
+
+export_session="${TEST_PREFIX}_export"
+export_file="$TMP_DIR/exported.yml"
+tmux new-session -d -s "$export_session" -n 'Dev: #1'
+export_first_window=$(tmux display-message -p -t "=$export_session" '#{window_id}')
+tmux split-window -h -t "$export_first_window"
+export_second_window=$(tmux new-window -d -t "=$export_session" -n 'Ops "quoted"' -P -F '#{window_id}')
+tmux split-window -v -t "$export_second_window"
+tmux split-window -v -t "$export_second_window"
+tmux select-window -t "$export_second_window"
+expected_active_pane=$(tmux list-panes -t "$export_second_window" -F '#{pane_id}' | sed -n '2p')
+tmux select-pane -t "$expected_active_pane"
+export_tmux=$(tmux display-message -p -t "=$export_session" '#{socket_path},#{pid},0')
+run_expect_success env TMUX="$export_tmux" TMUX_PANE="$expected_active_pane" "$TMUXIFY" --export "$export_file" >/dev/null
+[[ -f "$export_file" ]] || fail "expected export file"
+run_expect_success "$TMUXIFY" --dry-run --file "$export_file" >/dev/null
+exported_window_names=$(yq -r '.windows[].name' "$export_file" | paste -sd, -)
+[[ "$exported_window_names" == 'Dev: #1,Ops "quoted"' ]] || fail "expected safely encoded ordered window names, got $exported_window_names"
+[[ "$(yq -r '.windows | length' "$export_file")" == "2" ]] || fail "expected two exported windows"
+exported_pane_counts=$(yq -r '.windows[].layout.splits | length' "$export_file" | paste -sd, -)
+[[ "$exported_pane_counts" == "2,3" ]] || fail "expected exported pane counts 2,3, got $exported_pane_counts"
+[[ "$(yq -r '.session.initial_focus' "$export_file")" == "window2_pane2" ]] || fail "expected active pane focus window2_pane2"
+recreated_name="${TEST_PREFIX}_export_recreated"
+SESSION_NAME="$recreated_name" yq -i '.session.name = strenv(SESSION_NAME)' "$export_file"
+run_expect_success "$TMUXIFY" --file "$export_file" --detach --no-commands >/dev/null
+recreated_names=$(tmux list-windows -t "=$recreated_name" -F '#{window_name}' | paste -sd, -)
+[[ "$recreated_names" == 'Dev: #1,Ops "quoted"' ]] || fail "expected recreated window names, got $recreated_names"
+recreated_counts=$(tmux list-windows -t "=$recreated_name" -F '#{window_id}' | while read -r window; do tmux list-panes -t "$window" -F '#{pane_id}' | wc -l | tr -d ' '; done | paste -sd, -)
+[[ "$recreated_counts" == "2,3" ]] || fail "expected recreated pane counts 2,3, got $recreated_counts"
+recreated_window=$(tmux list-windows -t "=$recreated_name" -F '#{window_name} #{window_active}' | awk '$NF == 1 { sub(/ 1$/, ""); print }')
+recreated_second_window=$(tmux list-windows -t "=$recreated_name" -F '#{window_id}' | sed -n '2p')
+recreated_active=$(tmux list-panes -t "$recreated_second_window" -F '#{pane_id} #{pane_active}' | awk '$2 == 1 { print $1 }')
+recreated_expected=$(tmux list-panes -t "$recreated_second_window" -F '#{pane_id}' | sort -t % -k 2n | sed -n '2p')
+[[ "$recreated_window" == 'Ops "quoted"' && "$recreated_active" == "$recreated_expected" ]] || fail "expected exported active focus to be recreated"
+output=$(run_expect_failure env TMUX="$export_tmux" TMUX_PANE="$expected_active_pane" "$TMUXIFY" --export "$export_file")
+assert_contains "$output" "Refusing to overwrite existing file"
+symlink_export="$TMP_DIR/export-link.yml"
+ln -s "$TMP_DIR/missing-export-target" "$symlink_export"
+output=$(run_expect_failure env TMUX="$export_tmux" TMUX_PANE="$expected_active_pane" "$TMUXIFY" --export "$symlink_export")
+assert_contains "$output" "Refusing to overwrite symlink"
+single_export_session="#${TEST_PREFIX}_single"
+single_export_file="$TMP_DIR/single-exported.yml"
+tmux new-session -d -s "$single_export_session" -n 'Single: # pane'
+single_export_pane=$(tmux display-message -p -t "=$single_export_session" '#{pane_id}')
+single_export_tmux=$(tmux display-message -p -t "=$single_export_session" '#{socket_path},#{pid},0')
+run_expect_success env TMUX="$single_export_tmux" TMUX_PANE="$single_export_pane" "$TMUXIFY" --export "$single_export_file" >/dev/null
+run_expect_success "$TMUXIFY" --dry-run --file "$single_export_file" >/dev/null
+[[ "$(yq -r '.session.name' "$single_export_file")" == "$single_export_session" ]] || fail "expected YAML-significant session name to round trip"
+[[ "$(yq -r '.windows | length' "$single_export_file")" == "1" && "$(yq -r '.windows[0].layout.splits | length' "$single_export_file")" == "1" ]] || fail "expected one-window one-pane export"
+echo "ok 20 - export preserves all windows, pane structure, active focus, YAML names, and file protections"
