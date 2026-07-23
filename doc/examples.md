@@ -26,6 +26,11 @@ ${XDG_CONFIG_HOME:-$HOME/.config}/tmuxify/layouts/examples
 | `classic-4-pane.yml` | Editor, assistant/scratch, Git, terminal. |
 | `fullstack-dev.yml` | Backend/frontend monorepo starter. |
 | `golang-dev.yml` | Go project workbench. |
+| `multi-window-development.yml` | Safe two-window development, tests, and logs starter. |
+
+## Multi-window starter
+
+`multi-window-development.yml` demonstrates the session → window → nested layout → pane hierarchy. Its `initial_focus: editor` targets a pane; change it to `tests` to see window-ID focus select that window's first pane. Commands only open an available editor, show status, or print instructions—tests and log tailing remain manual.
 
 ## Shape demos
 

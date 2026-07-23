@@ -20,22 +20,28 @@ Run the syntax check first:
 bash -n tmuxify
 ```
 
-Run tests when local dependencies are available:
+Run static analysis and the full integration suite when local dependencies are available:
 
 ```bash
-tests/run.sh
+shellcheck tmuxify tests/run.sh
+bash tests/run.sh
 ```
+
+ShellCheck should pass without behavior-changing rewrites. If a deliberate `bash -c` string must defer expansion to the child shell, use the narrowest inline suppression and document why rather than broad suppression.
 
 The script itself needs Bash, tmux, and Mike Farah `yq` v4. Some tests may stub dependencies, but installing the real tools is best for end-to-end checks.
 
 ## Manual layout validation
 
-Validate examples with dry runs:
+Validate every bundled example with public dry runs:
 
 ```bash
-tmuxify --dry-run --file examples/layouts/basic-2-pane.yml
-tmuxify --dry-run --file examples/layouts/nested-dev.yml
+while IFS= read -r example; do
+  tmuxify --dry-run --file "$example"
+done < <(find examples/layouts -type f -name '*.yml' -print | sort)
 ```
+
+The integration suite also performs this all-example check. For an attached smoke test, preview a uniquely named temporary layout and run it normally; for detached coverage run `tmuxify --detach --file <layout>` and inspect the session with tmux before removing it. Never run unfamiliar example commands without previewing them.
 
 For command safety testing:
 

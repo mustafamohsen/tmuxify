@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VERSION="2.5.6"
+VERSION="2.6.0"
 REPO_URL="${TMUXIFY_REPO_URL:-https://raw.githubusercontent.com/mustafamohsen/tmuxify/main/tmuxify}"
 EXAMPLES_ARCHIVE_URL="${TMUXIFY_EXAMPLES_ARCHIVE_URL:-https://github.com/mustafamohsen/tmuxify/archive/refs/heads/main.tar.gz}"
 COMPLETIONS_ARCHIVE_URL="${TMUXIFY_COMPLETIONS_ARCHIVE_URL:-$EXAMPLES_ARCHIVE_URL}"
@@ -19,14 +19,21 @@ COMPLETION_OPTIONS=0
 DRY_RUN=0
 DETACH=0
 RUN_COMMANDS=1
-UPDATED_WITH_COMMAND_NOTICE=0
 TMP_DIR=""
+EXPORT_TEMP_FILE=""
 SESSION_CREATED=0
 
 info() { printf '%s\n' "ℹ️ $*"; }
 success() { printf '%s\n' "✅ $*"; }
 warn() { printf '%s\n' "⚠️ $*"; }
-die() { printf '%s\n' "❌ Error: $*" >&2; exit 1; }
+die() {
+  if [ "${SESSION_CREATED:-0}" -eq 1 ] && [ -n "${session_name:-}" ]; then
+    tmux kill-session -t "=$session_name" 2>/dev/null || true
+    SESSION_CREATED=0
+  fi
+  printf '%s\n' "❌ Error: $*" >&2
+  exit 1
+}
 
 usage() {
   cat <<'EOF'
@@ -56,6 +63,9 @@ EOF
 }
 
 cleanup() {
+  if [ -n "$EXPORT_TEMP_FILE" ]; then
+    rm -f "$EXPORT_TEMP_FILE"
+  fi
   if [ -n "$TMP_DIR" ] && [ -d "$TMP_DIR" ]; then
     rm -rf "$TMP_DIR"
   fi
@@ -342,6 +352,8 @@ init_tmp_dir() {
     : > "$TMP_DIR/pane_id_map"
     : > "$TMP_DIR/build_panes"
     : > "$TMP_DIR/seen_ids"
+    : > "$TMP_DIR/window_id_map"
+    : > "$TMP_DIR/configured_commands"
   fi
 }
 
@@ -442,19 +454,55 @@ validate_layout_node() {
 }
 
 validate_config() {
+  local has_layout has_windows windows_type window_count window_id window_name window_name_type i window_path
   [ -f "$CONFIG_FILE" ] || return 0
   if ! yq eval '.' "$CONFIG_FILE" >/dev/null 2>&1; then
     die "Invalid YAML syntax in $CONFIG_FILE"
   fi
-  layout_root_type=$(yq -r '.layout | type' "$CONFIG_FILE")
-  [ "$layout_root_type" = "!!map" ] || die "Missing required layout object in $CONFIG_FILE"
+  has_layout=$(yq -r 'has("layout")' "$CONFIG_FILE")
+  has_windows=$(yq -r 'has("windows")' "$CONFIG_FILE")
+  [ "$has_layout" != "true" ] || [ "$has_windows" != "true" ] || die "Configuration cannot contain both layout and windows."
+  [ "$has_layout" = "true" ] || [ "$has_windows" = "true" ] || die "Configuration must contain either a layout object or a windows collection."
+
   init_tmp_dir
   : > "$TMP_DIR/seen_ids"
-  validate_layout_node ".layout"
+  if [ "$has_windows" = "true" ]; then
+    windows_type=$(yq -r '.windows | type' "$CONFIG_FILE")
+    [ "$windows_type" = "!!seq" ] || die "windows must be a non-empty sequence."
+    window_count=$(yq -r '.windows | length' "$CONFIG_FILE")
+    [ "$window_count" -gt 0 ] 2>/dev/null || die "windows must be a non-empty sequence."
+    i=0
+    while [ "$i" -lt "$window_count" ]; do
+      window_path=".windows[$i]"
+      window_id=$(yq -r "$window_path.id // \"\"" "$CONFIG_FILE")
+      [ -n "$window_id" ] || die "Missing required window id at $window_path.id."
+      if ! printf '%s' "$window_id" | grep -Eq '^[A-Za-z][A-Za-z0-9_-]*$'; then
+        die "Invalid window id '$window_id' at $window_path.id. Use letters, numbers, underscores, and dashes; start with a letter."
+      fi
+      if grep -Fqx "$window_id" "$TMP_DIR/seen_ids"; then
+        die "Duplicate window or pane id '$window_id' at $window_path.id. IDs must be unique across the session."
+      fi
+      printf '%s\n' "$window_id" >> "$TMP_DIR/seen_ids"
+      window_name_type=$(yq -r "$window_path.name | type" "$CONFIG_FILE")
+      window_name=$(yq -r "$window_path.name // \"\"" "$CONFIG_FILE")
+      if [ "$window_name_type" != "!!str" ] || [ -z "$window_name" ]; then
+        die "Window name at $window_path.name must be a non-empty string."
+      fi
+      validate_layout_node "$window_path.layout"
+      i=$((i + 1))
+    done
+  else
+    layout_root_type=$(yq -r '.layout | type' "$CONFIG_FILE")
+    [ "$layout_root_type" = "!!map" ] || die "Missing required layout object in $CONFIG_FILE"
+    validate_layout_node ".layout"
+  fi
 
   initial_focus=$(yq -r '.session.initial_focus // ""' "$CONFIG_FILE")
   if [ -n "$initial_focus" ] && [ "$initial_focus" != "null" ]; then
     if ! grep -Fqx "$initial_focus" "$TMP_DIR/seen_ids"; then
+      if [ "$has_windows" = "true" ]; then
+        die "session.initial_focus '$initial_focus' does not match any window or pane id."
+      fi
       die "session.initial_focus '$initial_focus' does not match any pane id."
     fi
   fi
@@ -488,8 +536,12 @@ print_plan_node() {
   done
 }
 
+yaml_scalar() {
+  YAML_SCALAR_VALUE="$1" yq -n -o=json '. = strenv(YAML_SCALAR_VALUE)'
+}
+
 export_session() {
-  local current_session safe_session export_dir export_base temp_export pane_count i percent
+  local current_session safe_session export_dir export_base temp_export active_pane window_count window_number native_window window_name pane_count pane_number native_pane focus_id
   command -v tmux >/dev/null || die "tmux is required for --export."
   [ -n "$TMUX" ] || die "Not currently in a tmux session. Please run this inside tmux."
 
@@ -512,30 +564,56 @@ export_session() {
   export_base=$(basename "$EXPORT_FILENAME")
   [ -d "$export_dir" ] || die "Export directory does not exist: $export_dir"
   temp_export=$(mktemp "$export_dir/.${export_base}.tmp.XXXXXX") || die "Failed to create temporary export file."
+  EXPORT_TEMP_FILE="$temp_export"
   info "Exporting current session '$current_session' layout to $EXPORT_FILENAME..."
 
-  pane_count=$(tmux display-message -p '#{window_panes}') || die "Failed to read pane count."
+  active_pane=$(tmux display-message -p '#{pane_id}') || die "Failed to read active pane."
+  init_tmp_dir
+  tmux list-windows -t "=$current_session" -F '#{window_id}' > "$TMP_DIR/export_windows" || die "Failed to read window list."
+  window_count=$(wc -l < "$TMP_DIR/export_windows" | tr -d ' ')
+  [ "$window_count" -gt 0 ] 2>/dev/null || die "Current session has no windows."
+
+  focus_id=""
+  window_number=1
+  while IFS= read -r native_window; do
+    tmux display-message -p -t "$native_window" '#{window_name}' > "$TMP_DIR/export_window_name_$window_number" || die "Failed to read window name."
+    tmux list-panes -t "$native_window" -F '#{pane_id}' > "$TMP_DIR/export_window_panes_$window_number" || die "Failed to read window panes."
+    pane_number=1
+    while IFS= read -r native_pane; do
+      if [ "$native_pane" = "$active_pane" ]; then
+        focus_id="window${window_number}_pane${pane_number}"
+      fi
+      pane_number=$((pane_number + 1))
+    done < "$TMP_DIR/export_window_panes_$window_number"
+    window_number=$((window_number + 1))
+  done < "$TMP_DIR/export_windows"
+  [ -n "$focus_id" ] || die "Failed to identify active pane in current session."
 
   {
-    printf '# %s layout exported by tmuxify\n' "$current_session"
+    printf '# Simplified starter layout exported by tmuxify from session %s\n' "$(yaml_scalar "$current_session")"
     printf '# Generated on %s\n\n' "$(date)"
-    printf 'session:\n  name: "%s"\n  initial_focus: main\n\n' "$current_session"
-    printf 'layout:\n  type: horizontal\n  splits:\n'
-    printf '    - id: main\n      size: 60%%\n      command: "clear && echo '\''Main pane'\''"\n'
-    if [ "$pane_count" -gt 1 ]; then
-      printf '    - type: vertical\n      size: 40%%\n      splits:\n'
-      i=1
-      percent=$((100 / (pane_count - 1)))
-      while [ "$i" -lt "$pane_count" ]; do
-        printf '        - id: pane%s\n          size: %s%%\n          command: "clear && echo '\''Pane %s'\''"\n' "$i" "$percent" "$i"
-        i=$((i + 1))
+    printf 'session:\n  name: %s\n  initial_focus: %s\n\n' "$(yaml_scalar "$current_session")" "$focus_id"
+    printf 'windows:\n'
+    window_number=1
+    while IFS= read -r native_window; do
+      window_name=$(cat "$TMP_DIR/export_window_name_$window_number")
+      pane_count=$(wc -l < "$TMP_DIR/export_window_panes_$window_number" | tr -d ' ')
+      printf '  - id: window%s\n' "$window_number"
+      printf '    name: %s\n' "$(yaml_scalar "$window_name")"
+      printf '    layout:\n      type: horizontal\n      splits:\n'
+      pane_number=1
+      while [ "$pane_number" -le "$pane_count" ]; do
+        printf '        - id: window%s_pane%s\n' "$window_number" "$pane_number"
+        pane_number=$((pane_number + 1))
       done
-    fi
+      window_number=$((window_number + 1))
+    done < "$TMP_DIR/export_windows"
     printf '\n# Note: This is a simplified representation of your current session.\n'
-    printf '# Review pane sizes, arrangement, and commands before using it.\n'
-  } > "$temp_export" || { rm -f "$temp_export"; die "Failed to write export file."; }
+    printf '# Review pane sizes and add commands before using it; exact geometry, shell state, and history are not exported.\n'
+  } > "$temp_export" || die "Failed to write export file."
 
-  mv "$temp_export" "$EXPORT_FILENAME" || { rm -f "$temp_export"; die "Failed to finalize export file."; }
+  mv "$temp_export" "$EXPORT_FILENAME" || die "Failed to finalize export file."
+  EXPORT_TEMP_FILE=""
   success "Layout exported to $EXPORT_FILENAME"
   info "You can use this file with: tmuxify --file $EXPORT_FILENAME"
   exit 0
@@ -582,7 +660,17 @@ if [ "$DRY_RUN" -eq 1 ]; then
   printf 'Session: %s\n' "$session_name"
   if [ -f "$CONFIG_FILE" ]; then
     printf 'Layout plan:\n'
-    print_plan_node ".layout" "  "
+    if [ "$(yq -r 'has("windows")' "$CONFIG_FILE")" = "true" ]; then
+      window_count=$(yq -r '.windows | length' "$CONFIG_FILE")
+      i=0
+      while [ "$i" -lt "$window_count" ]; do
+        printf '  Window: %s (%s)\n' "$(yq -r ".windows[$i].id" "$CONFIG_FILE")" "$(yq -r ".windows[$i].name" "$CONFIG_FILE")"
+        print_plan_node ".windows[$i].layout" "    "
+        i=$((i + 1))
+      done
+    else
+      print_plan_node ".layout" "  "
+    fi
   else
     printf 'Layout plan:\n  - default 4-pane workspace\n'
   fi
@@ -617,9 +705,6 @@ fi
 
 tmux_or_die() {
   if ! "$@"; then
-    if [ "$SESSION_CREATED" -eq 1 ]; then
-      tmux kill-session -t "$session_name" 2>/dev/null || true
-    fi
     die "Command failed: $*"
   fi
 }
@@ -638,19 +723,20 @@ apply_size() {
   fi
 }
 
-send_configured_command() {
+queue_configured_command() {
+  [ "$RUN_COMMANDS" -eq 0 ] && return 0
+  printf '%s\t%s\n' "$1" "$2" >> "$TMP_DIR/configured_commands"
+}
+
+dispatch_configured_commands() {
   local pane_target item_path pane_command
-  pane_target="$1"
-  item_path="$2"
-  pane_command=$(yq -r "$item_path.command" "$CONFIG_FILE")
-  if [ "$RUN_COMMANDS" -eq 0 ]; then
-    return 0
-  fi
-  if [ "$UPDATED_WITH_COMMAND_NOTICE" -eq 0 ]; then
-    info "Running commands from $CONFIG_FILE. Use --dry-run to preview or --no-commands to create panes only."
-    UPDATED_WITH_COMMAND_NOTICE=1
-  fi
-  tmux_or_die tmux send-keys -t "$pane_target" "$pane_command" C-m
+  [ "$RUN_COMMANDS" -eq 0 ] && return 0
+  [ ! -s "$TMP_DIR/configured_commands" ] && return 0
+  info "Running commands from $CONFIG_FILE. Use --dry-run to preview or --no-commands to create panes only."
+  while IFS=$'\t' read -r pane_target item_path; do
+    pane_command=$(yq -r "$item_path.command" "$CONFIG_FILE")
+    tmux_or_die tmux send-keys -t "$pane_target" "$pane_command" C-m
+  done < "$TMP_DIR/configured_commands"
 }
 
 build_layout() {
@@ -672,10 +758,8 @@ build_layout() {
       else
         split_flag="-v"
       fi
-      current_pane=$(tmux split-window "$split_flag" -t "$prev_pane" -c "$WORKDIR" -P -F '#{pane_id}') || {
-        tmux kill-session -t "$session_name" 2>/dev/null || true
+      current_pane=$(tmux split-window "$split_flag" -t "$prev_pane" -c "$WORKDIR" -P -F '#{pane_id}') ||
         die "Failed to split pane $prev_pane while building $layout_path."
-      }
       previous_item_path="$layout_path.splits[$((i - 1))]"
       previous_size=$(yq -r "$previous_item_path.size // \"\"" "$CONFIG_FILE")
       apply_size "$layout_type" "$prev_pane" "$previous_size"
@@ -700,7 +784,7 @@ build_layout() {
       build_layout "$item_path" "$current_pane"
     fi
     if [ "$has_command" = "true" ]; then
-      send_configured_command "$current_pane" "$item_path"
+      queue_configured_command "$current_pane" "$item_path"
     fi
     i=$((i + 1))
   done
@@ -742,22 +826,54 @@ SESSION_CREATED=1
 info "Building layout from $CONFIG_FILE..."
 tmux_or_die tmux set-window-option -t "$session_name" aggressive-resize on
 root_pane=$(tmux display-message -t "$session_name" -p '#{pane_id}') || die "Failed to identify initial pane."
-build_layout ".layout" "$root_pane"
+first_pane="$root_pane"
+if [ "$(yq -r 'has("windows")' "$CONFIG_FILE")" = "true" ]; then
+  window_count=$(yq -r '.windows | length' "$CONFIG_FILE")
+  i=0
+  while [ "$i" -lt "$window_count" ]; do
+    window_id=$(yq -r ".windows[$i].id" "$CONFIG_FILE")
+    window_name=$(yq -r ".windows[$i].name" "$CONFIG_FILE")
+    if [ "$i" -eq 0 ]; then
+      window_pane="$root_pane"
+      native_window=$(tmux display-message -t "$window_pane" -p '#{window_id}') || die "Failed to identify initial window."
+      tmux_or_die tmux rename-window -t "$native_window" "$window_name"
+    else
+      window_result=$(tmux new-window -d -t "$session_name" -c "$WORKDIR" -n "$window_name" -P -F '#{window_id} #{pane_id}') ||
+        die "Failed to create configured window '$window_id'."
+      native_window=${window_result%% *}
+      window_pane=${window_result#* }
+    fi
+    printf '%s\t%s\t%s\n' "$window_id" "$native_window" "$window_pane" >> "$TMP_DIR/window_id_map"
+    tmux_or_die tmux set-window-option -t "$native_window" aggressive-resize on
+    build_layout ".windows[$i].layout" "$window_pane"
+    i=$((i + 1))
+  done
+else
+  build_layout ".layout" "$root_pane"
+fi
 
+dispatch_configured_commands
 initial_focus=$(yq -r '.session.initial_focus // ""' "$CONFIG_FILE")
+focus_pane=""
+focus_window=""
 if [ -n "$initial_focus" ] && [ "$initial_focus" != "null" ]; then
   focus_pane=$(lookup_pane_id "$initial_focus" || true)
   if [ -n "$focus_pane" ]; then
+    focus_window=$(tmux display-message -t "$focus_pane" -p '#{window_id}') || die "Failed to identify focus window."
     info "Setting initial focus to pane ID '$initial_focus'."
-    tmux_or_die tmux select-pane -t "$focus_pane"
   else
-    warn "Initial focus pane ID '$initial_focus' not found. Focusing first pane."
-    tmux_or_die tmux select-pane -t "$root_pane"
+    focus_record=$(awk -F '\t' -v id="$initial_focus" '$1 == id { print $2 "\t" $3; exit }' "$TMP_DIR/window_id_map")
+    focus_window=${focus_record%%$'\t'*}
+    focus_pane=${focus_record#*$'\t'}
+    info "Setting initial focus to window ID '$initial_focus'."
   fi
 else
+  focus_pane="$first_pane"
+  focus_window=$(tmux display-message -t "$focus_pane" -p '#{window_id}') || die "Failed to identify first window."
   info "Setting initial focus to first pane."
-  tmux_or_die tmux select-pane -t "$root_pane"
 fi
+tmux_or_die tmux select-window -t "$focus_window"
+tmux_or_die tmux select-pane -t "$focus_pane"
 
 success "Session '$session_name' created successfully."
 attach_or_switch "$session_name"

@@ -22,9 +22,9 @@ tmux -V
 
 Upgrade tmux through your OS package manager if needed.
 
-## `Missing required layout object`
+## Missing or empty layout/windows errors
 
-Your YAML must have a top-level `layout` object:
+Your YAML must have either a top-level `layout` object:
 
 ```yaml
 layout:
@@ -34,7 +34,7 @@ layout:
       command: clear
 ```
 
-Validate with:
+or a non-empty `windows` sequence. `windows: []` and files containing both forms are rejected. Validate with:
 
 ```bash
 tmuxify --dry-run --file layout.yml
@@ -57,18 +57,18 @@ size: 50%
 
 Sizes are best-effort because tmux may adjust panes based on terminal dimensions.
 
-## `Duplicate pane id` or invalid pane id
+## Duplicate or invalid ID
 
-Pane IDs must be unique. They must start with a letter and contain only letters, numbers, underscores, or dashes:
+Window and pane IDs share one session-wide namespace, so duplicates across windows and a window ID matching a pane ID are invalid. IDs must start with a letter and contain only letters, numbers, underscores, or dashes:
 
 ```yaml
 id: test_runner
 id: server-logs
 ```
 
-## `session.initial_focus ... does not match any pane id`
+## `session.initial_focus` does not match an ID
 
-Set `session.initial_focus` to an existing pane ID or remove it:
+Set `session.initial_focus` to an existing pane or window ID, not a visible window name or tmux index, or remove it:
 
 ```yaml
 session:
@@ -79,6 +79,16 @@ layout:
   splits:
     - id: editor
 ```
+
+For explicit windows, a window ID focuses its first pane; a pane ID focuses that exact pane. With no value, the first window's first pane is selected.
+
+## Custom indexes or renumbering seem to select the wrong target
+
+Tmuxify uses native tmux window and pane IDs and does not assume index zero. If results appear stale, check whether a same-named session already exists; existing sessions are reused without reconciliation.
+
+## A creation failure occurred
+
+A detected structural failure removes the newly created partial session. If a session remains, verify whether it existed before the run or whether a pane command—not structure creation—failed later. Tmuxify cannot roll back programs after their commands were successfully sent.
 
 ## Session attaches instead of rebuilding
 
