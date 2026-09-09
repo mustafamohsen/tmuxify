@@ -21,6 +21,7 @@ DETACH=0
 RUN_COMMANDS=1
 TMP_DIR=""
 EXPORT_TEMP_FILE=""
+UPDATE_STAGE_FILE=""
 SESSION_CREATED=0
 
 info() { printf '%s\n' "ℹ️ $*"; }
@@ -63,6 +64,9 @@ EOF
 }
 
 cleanup() {
+  if [ -n "$UPDATE_STAGE_FILE" ]; then
+    rm -f "$UPDATE_STAGE_FILE"
+  fi
   if [ -n "$EXPORT_TEMP_FILE" ]; then
     rm -f "$EXPORT_TEMP_FILE"
   fi
@@ -230,6 +234,7 @@ safe_update() {
 
   info "Downloading latest tmuxify..."
   temp_dir=$(mktemp -d 2>/dev/null || mktemp -d -t tmuxify-update) || die "Failed to create temporary directory."
+  TMP_DIR="$temp_dir"
   temp_file="$temp_dir/tmuxify"
   examples_archive="$temp_dir/tmuxify-examples.tar.gz"
   completions_archive="$temp_dir/tmuxify-completions.tar.gz"
@@ -242,16 +247,19 @@ safe_update() {
   [ -s "$temp_file" ] || { rm -rf "$temp_dir"; die "Downloaded file is empty. Update failed."; }
   first_line=$(sed -n '1p' "$temp_file")
   case "$first_line" in
-    '#!'*) ;;
-    *) rm -rf "$temp_dir"; die "Downloaded file does not look executable. Update aborted." ;;
+    '#!/usr/bin/env bash'|'#!/bin/bash') ;;
+    *) rm -rf "$temp_dir"; die "Downloaded candidate must be a Bash script. Update aborted." ;;
   esac
 
-  if ! grep -q '^#!/' "$temp_file" || ! grep -q '^VERSION=' "$temp_file"; then
+  if ! bash -n "$temp_file"; then
     rm -rf "$temp_dir"
-    die "Downloaded candidate failed static validation."
+    die "Downloaded candidate has invalid Bash syntax. Update aborted."
   fi
-  chmod +x "$temp_file" || { rm -rf "$temp_dir"; die "Failed to mark downloaded candidate executable."; }
-  candidate_version=$(sed -n 's/^VERSION="\([0-9][0-9.]*\)"$/\1/p' "$temp_file" | head -n 1)
+  if [ "$(grep -c '^VERSION=' "$temp_file")" != 1 ] || ! grep -Eq '^VERSION="[0-9]+\.[0-9]+\.[0-9]+"$' "$temp_file"; then
+    rm -rf "$temp_dir"
+    die "Downloaded candidate must declare one numeric major.minor.patch VERSION. Update aborted."
+  fi
+  candidate_version=$(sed -n 's/^VERSION="\([0-9.]*\)"$/\1/p' "$temp_file")
   info "Downloading latest example layouts..."
   if ! curl -fsSL "$EXAMPLES_ARCHIVE_URL" -o "$examples_archive"; then
     warn "Failed to download example layouts from $EXAMPLES_ARCHIVE_URL; continuing with script update."
@@ -262,7 +270,6 @@ safe_update() {
     warn "Failed to download completions from $COMPLETIONS_ARCHIVE_URL; continuing with script update."
     completions_archive=""
   fi
-  [ -n "$candidate_version" ] || candidate_version="unknown"
 
   SCRIPT_PATH=$(command -v "$0" 2>/dev/null || printf '%s' "$0")
   INSTALL_DIR=$(dirname "$SCRIPT_PATH")
@@ -273,13 +280,21 @@ safe_update() {
     die "Insufficient permissions to update $INSTALL_PATH. Re-run your package manager update, or install manually after reviewing the release. tmuxify no longer escalates with sudo automatically."
   fi
 
-  backup="$INSTALL_PATH.bak.$$"
+  # Stage alongside the install so the final rename stays on one filesystem.
+  # Set permissions before publishing; a chmod failure must not damage the install.
+  UPDATE_STAGE_FILE=$(mktemp "$INSTALL_DIR/.tmuxify-update.XXXXXX") || die "Failed to stage update beside $INSTALL_PATH."
+  if ! cp "$temp_file" "$UPDATE_STAGE_FILE" || ! chmod +x "$UPDATE_STAGE_FILE"; then
+    die "Failed to prepare executable update."
+  fi
+  backup=""
   if [ -e "$INSTALL_PATH" ]; then
-    cp "$INSTALL_PATH" "$backup" || { rm -rf "$temp_dir"; die "Failed to create update backup."; }
+    backup=$(mktemp "$INSTALL_DIR/.tmuxify-backup.XXXXXX") || die "Failed to prepare update backup."
+    cp -p "$INSTALL_PATH" "$backup" || { rm -f "$backup"; die "Failed to create update backup."; }
   fi
 
-  if mv "$temp_file" "$INSTALL_PATH" && chmod +x "$INSTALL_PATH"; then
-    [ -e "$backup" ] && rm -f "$backup"
+  if mv "$UPDATE_STAGE_FILE" "$INSTALL_PATH"; then
+    UPDATE_STAGE_FILE=""
+    [ -n "$backup" ] && rm -f "$backup"
     mkdir -p "$TMUXIFY_CONFIG_DIR" "$GLOBAL_LAYOUTS_DIR" "$GLOBAL_COMPLETIONS_DIR" || { rm -rf "$temp_dir"; die "Failed to create tmuxify config directories."; }
     if [ -n "$examples_archive" ]; then
       install_example_layouts "$examples_archive" "$temp_dir/examples"
@@ -292,9 +307,13 @@ safe_update() {
     exit 0
   fi
 
-  [ -e "$backup" ] && mv "$backup" "$INSTALL_PATH"
-  rm -rf "$temp_dir"
-  die "Failed to replace installed script; previous version restored."
+  if [ -n "$backup" ]; then
+    if mv "$backup" "$INSTALL_PATH"; then
+      die "Failed to replace installed script; previous version restored."
+    fi
+    die "Failed to replace installed script and restore it; recovery backup retained at $backup. Restore it manually."
+  fi
+  die "Failed to replace installed script."
 }
 
 if [ "${UPDATE_REQUESTED:-0}" -eq 1 ]; then

@@ -36,7 +36,11 @@ Avoid piping mutable scripts into `sudo`. If you need a system-wide install, use
 tmuxify --update
 ```
 
-The updater downloads to a temporary file, checks that the candidate is executable and can report a version, backs up the current script, and replaces it only when the install path is writable. It does not automatically escalate with `sudo`.
+The updater checks the candidate's Bash shebang, Bash syntax, and one embedded numeric `major.minor.patch` version. It does not execute the downloaded program for validation. Invalid candidates leave the installation unchanged.
+
+The replacement is staged beside the writable install path and made executable before an atomic rename. A backup preserves the previous version on replacement failure. If automatic restoration also fails, the error reports a retained recovery backup to restore manually. Examples and completions are still refreshed on successful script updates. The updater does not automatically escalate with `sudo`.
+
+These are format and syntax checks, not authenticity checks or a sandbox. For higher assurance, install a reviewed release or pinned commit rather than a mutable branch.
 
 ## User config directory
 
