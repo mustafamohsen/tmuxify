@@ -40,7 +40,9 @@ command: clear && echo "Manual: run deploy only after checking target"
 
 ## Updating safely
 
-`tmuxify --update` downloads a candidate script, checks that it is executable and can report a version, backs up the current script, and replaces it only when the install path is writable. It does not automatically escalate with `sudo`.
+`tmuxify --update` checks a candidate's Bash shebang, syntax, and embedded numeric version without executing it. It prepares executable permissions before replacing the writable installation and keeps a backup for recovery. If replacement and restoration both fail, the error identifies the retained backup. It does not automatically escalate with `sudo`.
+
+These checks reject malformed downloads; they do not authenticate a release or establish that its code is safe.
 
 For higher-assurance environments, install reviewed releases or pinned commits rather than updating from a mutable branch.
 

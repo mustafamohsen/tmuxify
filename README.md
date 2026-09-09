@@ -44,7 +44,7 @@ System-wide installs are fine when managed by an admin or package manager, but a
 tmuxify --update
 ```
 
-The updater downloads to a temporary file, checks that the candidate is executable and can report a version, backs up the current script, and replaces it only if the install path is writable.
+The updater checks the downloaded candidate's Bash shebang, syntax, and embedded numeric version without executing it. It stages an executable replacement beside the writable install path and backs up the current script before an atomic rename. Failed replacement restores the backup; if restoration also fails, the error gives the retained backup path. These checks detect malformed downloads, not malicious code or release authenticity.
 
 ## Usage
 
