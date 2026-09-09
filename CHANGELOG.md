@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.6.1] – 2026-09-09
+
+### Fixed
+- Made the built-in four-pane workspace honor `--no-commands` and show its commands in `--dry-run`; it remains usable as a shell when Neovim is unavailable.
+- Calculated pane percentages within their parent layout, including final-child sizes, omitted sizes, separator cells, and minimum dimensions. Existing YAML remains valid, but corrected sizing can change the geometry of existing layouts.
+- Reused and attached only to exactly matching session names instead of accepting prefix matches.
+- Cleaned temporary files before attachment and rolled back unfinished sessions on HUP, INT, and TERM. Native session IDs keep rollback tied to the owned session across renames, while completed and unrelated workspaces are preserved.
+- Rejected update candidates with invalid Bash syntax or version metadata without executing them. Staged replacements preserve readable executable permissions; failed replacement restores the previous version or reports a retained recovery backup if restoration fails.
+- Restored Bash 3.2 option and filename completion, including paths containing spaces, without adding dependencies.
+
+### Tests
+- Added focused public-CLI regressions for workspace construction and cleanup, offline update failures and recovery, and shell completion behavior.
+- Preserved the full suite's TAP plan when discovering focused regression scripts.
+- Added actual Bash 3.2 completion coverage in macOS CI and expanded ShellCheck coverage to completions and tests.
+- Restricted CI to read-only repository permissions without persisting checkout credentials.
+
 ## [2.6.0] – 2026-07-23
 
 ### Added
