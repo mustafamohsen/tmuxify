@@ -23,11 +23,13 @@ bash -n tmuxify
 Run static analysis and the full integration suite when local dependencies are available:
 
 ```bash
-shellcheck tmuxify tests/run.sh
+shellcheck tmuxify completions/tmuxify.bash tests/*.sh
 bash tests/run.sh
 ```
 
 ShellCheck should pass without behavior-changing rewrites. If a deliberate `bash -c` string must defer expansion to the child shell, use the narrowest inline suppression and document why rather than broad suppression.
+
+Focused regression scripts named `tests/*-test.sh` can also be run individually; the full suite discovers them automatically. Completion behavior is tested on current Bash and on the advertised Bash 3.2 baseline in macOS CI. On macOS, run `/bin/bash tests/completion-test.sh` to check the system Bash directly; completion tests need neither tmux nor yq.
 
 The script itself needs Bash, tmux, and Mike Farah `yq` v4. Some tests may stub dependencies, but installing the real tools is best for end-to-end checks.
 

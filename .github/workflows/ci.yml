@@ -4,12 +4,17 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install dependencies
         run: |
@@ -19,7 +24,22 @@ jobs:
           sudo chmod +x /usr/local/bin/yq
 
       - name: ShellCheck
-        run: shellcheck tmuxify
+        run: shellcheck tmuxify completions/tmuxify.bash tests/*.sh
 
       - name: Run integration tests
         run: tests/run.sh
+
+  completion-bash32:
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Exercise completion on the advertised Bash baseline
+        shell: /bin/bash {0}
+        run: |
+          test "${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}" = 3.2
+          /bin/bash -n tmuxify
+          /bin/bash tests/completion-test.sh

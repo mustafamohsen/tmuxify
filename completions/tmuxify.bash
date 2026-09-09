@@ -13,7 +13,7 @@ _tmuxify_file_options() {
 }
 
 _tmuxify() {
-  local cur prev opts file_opts
+  local cur prev opts file_opts candidate
   COMPREPLY=()
   cur=${COMP_WORDS[COMP_CWORD]}
   prev=${COMP_WORDS[COMP_CWORD-1]}
@@ -21,12 +21,16 @@ _tmuxify() {
   file_opts=$(_tmuxify_file_options)
 
   if printf '%s\n' "$file_opts" | grep -Fxq -- "$prev"; then
-    mapfile -t COMPREPLY < <(compgen -f -- "$cur")
+    while IFS= read -r candidate; do
+      COMPREPLY+=("$candidate")
+    done < <(compgen -f -- "$cur")
     return 0
   fi
 
   if [[ $cur == -* ]]; then
-    mapfile -t COMPREPLY < <(compgen -W "$opts" -- "$cur")
+    while IFS= read -r candidate; do
+      COMPREPLY+=("$candidate")
+    done < <(compgen -W "$opts" -- "$cur")
   fi
 }
 

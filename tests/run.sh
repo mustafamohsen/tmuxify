@@ -51,7 +51,13 @@ run_expect_failure() {
   printf '%s' "$output"
 }
 
-echo "1..20"
+test_number=20
+test_count=$test_number
+for test_file in "$ROOT_DIR"/tests/*-test.sh; do
+  [[ -f "$test_file" ]] || continue
+  test_count=$((test_count + 1))
+done
+echo "1..$test_count"
 
 output=$(run_expect_success "$TMUXIFY" --help)
 assert_contains "$output" "--dry-run"
@@ -515,3 +521,15 @@ run_expect_success "$TMUXIFY" --dry-run --file "$single_export_file" >/dev/null
 [[ "$(yq -r '.session.name' "$single_export_file")" == "$single_export_session" ]] || fail "expected YAML-significant session name to round trip"
 [[ "$(yq -r '.windows | length' "$single_export_file")" == "1" && "$(yq -r '.windows[0].layout.splits | length' "$single_export_file")" == "1" ]] || fail "expected one-window one-pane export"
 echo "ok 20 - export preserves all windows, pane structure, active focus, YAML names, and file protections"
+
+# Focused public-boundary regressions can also be run independently.
+for test_file in "$ROOT_DIR"/tests/*-test.sh; do
+  [[ -f "$test_file" ]] || continue
+  test_number=$((test_number + 1))
+  if bash "$test_file" 2>&1 | sed 's/^/# /'; then
+    echo "ok $test_number - ${test_file##*/}"
+  else
+    echo "not ok $test_number - ${test_file##*/}"
+    exit 1
+  fi
+done
