@@ -22,15 +22,13 @@ RUN_COMMANDS=1
 TMP_DIR=""
 EXPORT_TEMP_FILE=""
 SESSION_CREATED=0
+SESSION_CREATING=0
+INTERRUPTED_STATUS=0
 
 info() { printf '%s\n' "ℹ️ $*"; }
 success() { printf '%s\n' "✅ $*"; }
 warn() { printf '%s\n' "⚠️ $*"; }
 die() {
-  if [ "${SESSION_CREATED:-0}" -eq 1 ] && [ -n "${session_name:-}" ]; then
-    tmux kill-session -t "=$session_name" 2>/dev/null || true
-    SESSION_CREATED=0
-  fi
   printf '%s\n' "❌ Error: $*" >&2
   exit 1
 }
@@ -63,6 +61,10 @@ EOF
 }
 
 cleanup() {
+  if [ "$SESSION_CREATED" -eq 1 ]; then
+    tmux kill-session -t "=$session_name" 2>/dev/null || true
+    SESSION_CREATED=0
+  fi
   if [ -n "$EXPORT_TEMP_FILE" ]; then
     rm -f "$EXPORT_TEMP_FILE"
   fi
@@ -70,7 +72,19 @@ cleanup() {
     rm -rf "$TMP_DIR"
   fi
 }
-trap cleanup EXIT HUP INT TERM
+handle_signal() {
+  # A signal may arrive after tmux created the session but before ownership was
+  # recorded. Finish that one transition before exiting and rolling back.
+  if [ "$SESSION_CREATING" -eq 1 ]; then
+    INTERRUPTED_STATUS="$1"
+  else
+    exit "$1"
+  fi
+}
+trap cleanup EXIT
+trap 'handle_signal 129' HUP
+trap 'handle_signal 130' INT
+trap 'handle_signal 143' TERM
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -623,6 +637,38 @@ if [ "$EXPORT_FLAG" -eq 1 ]; then
   export_session
 fi
 
+# Use the same preview, construction, and command controls for the built-in layout.
+if [ ! -f "$CONFIG_FILE" ]; then
+  init_tmp_dir
+  CONFIG_FILE="$TMP_DIR/default.yml"
+  cat > "$CONFIG_FILE" <<'YAML'
+session:
+  initial_focus: editor
+layout:
+  type: horizontal
+  splits:
+    - id: editor
+      size: 50%
+      command: "if command -v nvim >/dev/null 2>&1; then nvim .; else printf '%s\\n' 'Install Neovim or use this shell for your editor.'; fi"
+    - type: vertical
+      size: 50%
+      splits:
+        - id: assistant
+          size: 50%
+          command: "echo 'Top Right Pane (e.g., aider)'"
+        - type: horizontal
+          size: 50%
+          splits:
+            - id: git
+              size: 50%
+              command: "echo 'Bottom Left (e.g., lazygit)'"
+            - id: terminal
+              size: 50%
+              command: "clear && echo 'Bottom Right (terminal)'"
+YAML
+  info "Using default 4-pane workspace."
+fi
+
 validate_config
 
 # Generate session name from directory path
@@ -688,17 +734,20 @@ fi
 attach_or_switch() {
   local target_session
   target_session="$1"
+  # Construction is committed; attachment failure must not destroy the workspace.
+  SESSION_CREATED=0
+  cleanup
   if [ "$DETACH" -eq 1 ]; then
     success "Session '$target_session' is ready. Attach with: tmux attach -t $target_session"
     exit 0
   fi
   if [ -n "$TMUX" ]; then
-    exec tmux switch-client -t "$target_session"
+    exec tmux switch-client -t "=$target_session"
   fi
-  exec tmux attach -t "$target_session"
+  exec tmux attach -t "=$target_session"
 }
 
-if tmux has-session -t "$session_name" 2>/dev/null; then
+if tmux has-session -t "=$session_name" 2>/dev/null; then
   success "Attaching to existing session: $session_name"
   attach_or_switch "$session_name"
 fi
@@ -709,18 +758,40 @@ tmux_or_die() {
   fi
 }
 
-apply_size() {
-  local layout_type pane_target size_value size_percent
-  layout_type="$1"
-  pane_target="$2"
-  size_value="$3"
-  if [ -z "$size_value" ] || [ "$size_value" = "null" ]; then return 0; fi
-  size_percent=$(printf '%s' "$size_value" | sed 's/%$//')
-  if [ "$layout_type" = "horizontal" ]; then
-    tmux resize-pane -t "$pane_target" -x "$size_percent%" >/dev/null 2>&1 || warn "Could not resize pane $pane_target to width $size_value."
-  else
-    tmux resize-pane -t "$pane_target" -y "$size_percent%" >/dev/null 2>&1 || warn "Could not resize pane $pane_target to height $size_value."
-  fi
+# Allocate the parent extent once, reserving separators and at least one cell
+# per child. Normalize oversubscribed (or fully explicit) ratios to fit.
+allocate_pane_sizes() {
+  yq -r "$1.splits[].size // \"auto\"" "$CONFIG_FILE" | awk -v extent="$2" '
+    { n++; if ($0 == "auto") { automatic[n]=1; autos++ }
+      else { weights[n]=$0+0; explicit+=$0 } }
+    END {
+      remaining=extent-(n-1)
+      if (remaining < n) exit 1
+      share=(autos && explicit < 100) ? (100-explicit)/autos : 0
+      for (i=1; i<=n; i++) {
+        if (automatic[i]) weights[i]=share
+        total+=weights[i]
+      }
+      # Clamp undersized children, then redistribute among the others.
+      do {
+        changed=0
+        for (i=1; i<=n; i++) {
+          if (!fixed[i] && (!weights[i] || remaining*weights[i]/total < 1)) {
+            cells[i]=1; fixed[i]=1; remaining--; total-=weights[i]; changed=1
+          }
+        }
+      } while (changed)
+      cumulative=0; allocated=0
+      for (i=1; i<=n; i++) {
+        if (!fixed[i]) {
+          cumulative+=weights[i]
+          next_total=int(remaining*cumulative/total+0.000001)
+          cells[i]=next_total-allocated; allocated=next_total
+        }
+        printf "%s%d", (i == 1 ? "" : " "), cells[i]
+      }
+      printf "\n"
+    }'
 }
 
 queue_configured_command() {
@@ -740,11 +811,22 @@ dispatch_configured_commands() {
 }
 
 build_layout() {
-  local layout_path container_pane layout_type count i prev_pane item_path current_pane split_flag previous_item_path previous_size has_nested has_command pane_id
+  local layout_path container_pane layout_type count i prev_pane item_path current_pane split_flag has_nested has_command pane_id extent size_plan remaining
+  local -a pane_sizes
   layout_path="$1"
   container_pane="$2"
   layout_type=$(yq -r "$layout_path.type" "$CONFIG_FILE")
   count=$(yq -r "$layout_path.splits | length" "$CONFIG_FILE")
+  if [ "$layout_type" = "horizontal" ]; then
+    split_flag="-h"
+    extent=$(tmux display-message -p -t "$container_pane" '#{pane_width}') || die "Failed to read parent width."
+  else
+    split_flag="-v"
+    extent=$(tmux display-message -p -t "$container_pane" '#{pane_height}') || die "Failed to read parent height."
+  fi
+  size_plan=$(allocate_pane_sizes "$layout_path" "$extent") || die "Not enough room for $count panes at $layout_path. Enlarge the tmux window or reduce the splits."
+  read -r -a pane_sizes <<< "$size_plan"
+  remaining="$extent"
 
   i=0
   prev_pane=""
@@ -753,16 +835,9 @@ build_layout() {
     if [ "$i" -eq 0 ]; then
       current_pane="$container_pane"
     else
-      if [ "$layout_type" = "horizontal" ]; then
-        split_flag="-h"
-      else
-        split_flag="-v"
-      fi
-      current_pane=$(tmux split-window "$split_flag" -t "$prev_pane" -c "$WORKDIR" -P -F '#{pane_id}') ||
+      remaining=$((remaining - pane_sizes[i - 1] - 1))
+      current_pane=$(tmux split-window "$split_flag" -l "$remaining" -t "$prev_pane" -c "$WORKDIR" -P -F '#{pane_id}') ||
         die "Failed to split pane $prev_pane while building $layout_path."
-      previous_item_path="$layout_path.splits[$((i - 1))]"
-      previous_size=$(yq -r "$previous_item_path.size // \"\"" "$CONFIG_FILE")
-      apply_size "$layout_type" "$prev_pane" "$previous_size"
     fi
     record_build_pane "$layout_path" "$i" "$current_pane"
     prev_pane="$current_pane"
@@ -790,42 +865,24 @@ build_layout() {
   done
 }
 
-create_default_layout() {
-  local pane0 pane1 pane2 pane3
-  info "Using default 4-pane layout."
-  tmux_or_die tmux new-session -d -s "$session_name" -c "$WORKDIR" "nvim ."
-  SESSION_CREATED=1
-  tmux_or_die tmux set-window-option -t "$session_name" aggressive-resize on
-  pane0=$(tmux display-message -t "$session_name" -p '#{pane_id}') || die "Failed to identify initial pane."
-  pane1=$(tmux split-window -h -t "$pane0" -c "$WORKDIR" -P -F '#{pane_id}') || die "Failed to create default pane."
-  apply_size horizontal "$pane0" "50%"
-  pane2=$(tmux split-window -v -t "$pane1" -c "$WORKDIR" -P -F '#{pane_id}') || die "Failed to create default pane."
-  apply_size vertical "$pane1" "50%"
-  pane3=$(tmux split-window -h -t "$pane2" -c "$WORKDIR" -P -F '#{pane_id}') || die "Failed to create default pane."
-  apply_size horizontal "$pane2" "50%"
-  tmux_or_die tmux send-keys -t "$pane1" "echo 'Top Right Pane (e.g., aider)'" C-m
-  tmux_or_die tmux send-keys -t "$pane2" "echo 'Bottom Left (e.g., lazygit)'" C-m
-  tmux_or_die tmux send-keys -t "$pane3" "clear && echo 'Bottom Right (terminal)'" C-m
-  tmux_or_die tmux select-pane -t "$pane0"
-}
-
 echo "🚀 Creating new session: $session_name"
-
-if [ ! -f "$CONFIG_FILE" ]; then
-  create_default_layout
-  success "Session '$session_name' created successfully."
-  attach_or_switch "$session_name"
-fi
 
 # reset runtime maps after validation
 : > "$TMP_DIR/pane_id_map"
 : > "$TMP_DIR/build_panes"
 
-tmux_or_die tmux new-session -d -s "$session_name" -c "$WORKDIR"
-SESSION_CREATED=1
+SESSION_CREATING=1
+if tmux new-session -d -s "$session_name" -c "$WORKDIR"; then
+  SESSION_CREATED=1
+else
+  SESSION_CREATING=0
+  die "Failed to create session '$session_name'."
+fi
+SESSION_CREATING=0
+[ "$INTERRUPTED_STATUS" -eq 0 ] || exit "$INTERRUPTED_STATUS"
 info "Building layout from $CONFIG_FILE..."
-tmux_or_die tmux set-window-option -t "$session_name" aggressive-resize on
-root_pane=$(tmux display-message -t "$session_name" -p '#{pane_id}') || die "Failed to identify initial pane."
+tmux_or_die tmux set-window-option -t "=$session_name:" aggressive-resize on
+root_pane=$(tmux display-message -t "=$session_name:" -p '#{pane_id}') || die "Failed to identify initial pane."
 first_pane="$root_pane"
 if [ "$(yq -r 'has("windows")' "$CONFIG_FILE")" = "true" ]; then
   window_count=$(yq -r '.windows | length' "$CONFIG_FILE")
@@ -838,7 +895,7 @@ if [ "$(yq -r 'has("windows")' "$CONFIG_FILE")" = "true" ]; then
       native_window=$(tmux display-message -t "$window_pane" -p '#{window_id}') || die "Failed to identify initial window."
       tmux_or_die tmux rename-window -t "$native_window" "$window_name"
     else
-      window_result=$(tmux new-window -d -t "$session_name" -c "$WORKDIR" -n "$window_name" -P -F '#{window_id} #{pane_id}') ||
+      window_result=$(tmux new-window -d -t "=$session_name:" -c "$WORKDIR" -n "$window_name" -P -F '#{window_id} #{pane_id}') ||
         die "Failed to create configured window '$window_id'."
       native_window=${window_result%% *}
       window_pane=${window_result#* }

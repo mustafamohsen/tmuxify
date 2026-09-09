@@ -11,6 +11,8 @@ When you run `tmuxify` without `--file`, layout selection is:
 3. `${XDG_CONFIG_HOME:-$HOME/.config}/tmuxify/layouts/default.yml`.
 4. Built-in four-pane layout.
 
+The built-in workspace uses the same preview and command controls as YAML layouts. Its editor pane starts Neovim when available; otherwise it remains a shell with an installation hint. Neovim is optional. `--dry-run` shows all built-in commands, and `--no-commands` suppresses them, including the editor.
+
 ## Project layout
 
 Put a checked-in `.tmuxify.yml` at a project root when the workspace is useful to everyone on the project:
@@ -68,7 +70,7 @@ If `session.name` is missing, tmuxify derives the session name from the current 
 - leading/trailing `_` are trimmed.
 - an empty result falls back to `tmuxify_session`.
 
-If the session already exists, tmuxify attaches or switches to it instead of rebuilding panes.
+If a session with the exact name already exists, tmuxify attaches or switches to it instead of rebuilding panes. A longer name with the same prefix is a different workspace.
 
 ## Commands and working directory
 

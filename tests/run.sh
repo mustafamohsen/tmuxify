@@ -515,3 +515,9 @@ run_expect_success "$TMUXIFY" --dry-run --file "$single_export_file" >/dev/null
 [[ "$(yq -r '.session.name' "$single_export_file")" == "$single_export_session" ]] || fail "expected YAML-significant session name to round trip"
 [[ "$(yq -r '.windows | length' "$single_export_file")" == "1" && "$(yq -r '.windows[0].layout.splits | length' "$single_export_file")" == "1" ]] || fail "expected one-window one-pane export"
 echo "ok 20 - export preserves all windows, pane structure, active focus, YAML names, and file protections"
+
+# Focused public-boundary regressions can also be run independently.
+for test_file in "$ROOT_DIR"/tests/*-test.sh; do
+  [[ -f "$test_file" ]] || continue
+  bash "$test_file"
+done

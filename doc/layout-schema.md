@@ -84,11 +84,19 @@ layout:
 | Key | Required | Description |
 |---|---:|---|
 | `id` | No | Stable pane identifier for focus. Must start with a letter and contain only letters, numbers, `_`, or `-`. IDs must be unique. |
-| `size` | No | Percent from `1%` to `100%`. Applied best-effort after the split is created. |
+| `size` | No | Percent from `1%` to `100%`, relative to the containing layout's available width or height. |
 | `command` | No | String sent to the pane as shell input after creation. |
 | `type` + `splits` | No | If present, the item is a nested layout container. |
 
 A leaf pane with neither `id` nor `command` is allowed, but tmuxify warns because it creates an unnamed empty shell.
+
+### Size allocation
+
+Sizing applies independently within each parent, including the last child. Separator cells are removed from the parent's available extent before allocation. Omitted sizes share the remaining percentage equally; with no explicit sizes, all siblings share equally. If every size is explicit, their percentages are treated as ratios and normalized to fill the parent, even when their sum differs from 100%.
+
+Each child gets at least one cell. If explicit sizes consume 100% or more, omitted children receive that minimum and explicit ratios share the rest. Other sub-cell allocations are also clamped to one cell and the remaining space is redistributed. Fractional cells are rounded cumulatively in declaration order, so feasible ratios can differ by one cell. Existing percentage values remain valid; oversubscribed ratios are fitted rather than rejected.
+
+If the parent cannot fit even one cell per child plus separators, construction fails and the unfinished session is removed. Enlarge the tmux window or reduce the number of splits.
 
 ## Nested example
 
