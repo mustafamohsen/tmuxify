@@ -38,6 +38,13 @@ for pane in $(tmux list-panes -t '=project' -F '#{pane_id}'); do
 done
 echo 'ok - built-in workspace suppresses commands and retains structure and focus'
 
+mkdir "$TEST_DIR/editor-project"
+(cd "$TEST_DIR/editor-project" && "$TMUXIFY" --detach > "$TEST_DIR/output")
+for _ in {1..100}; do [[ -e "$HOME/editor-started" ]] && break; sleep 0.05; done
+[[ -e "$HOME/editor-started" ]] || fail 'normal default startup did not launch an available editor'
+tmux kill-session -t '=editor-project'
+rm "$HOME/editor-started"
+
 real_tmux=$(command -v tmux)
 cat > "$TEST_DIR/bin/tmux" <<'SH'
 #!/bin/sh
@@ -119,6 +126,7 @@ printf '%s\n' "$geometry" | awk '
   NR == 2 { top_height=$2 }
   NR == 3 { left_width=$1; bottom_height=$2 }
   NR == 4 { if ($1 < 30 || $1 > 33 || left_width-$1 > 1 || $1-left_width > 1 || top_height-bottom_height > 1 || bottom_height-top_height > 1) exit 1 }
+  END { if (NR != 4) exit 1 }
 ' || fail "nested parent-relative 50/50 geometry is wrong: $geometry"
 echo 'ok - nested horizontal and vertical sizes use their parent dimensions'
 
@@ -152,6 +160,10 @@ case "$1" in
 esac
 if [[ "$1" == "${TMUXIFY_INTERRUPT_AT:-}" ]]; then
   "$TMUXIFY_REAL_TMUX" "$@" || exit $?
+  if [[ -n "${TMUXIFY_RENAME_DURING_CREATION:-}" ]]; then
+    "$TMUXIFY_REAL_TMUX" rename-session -t '=interrupted' renamed-owned
+    "$TMUXIFY_REAL_TMUX" new-session -d -s interrupted -n Replacement
+  fi
   kill -s "$TMUXIFY_SIGNAL" "$PPID"
   exit 0
 fi
@@ -195,3 +207,48 @@ tmux has-session -t '=interrupted' || fail 'attachment failure removed a complet
 "$TMUXIFY" --dry-run --file "$TEST_DIR/interrupted.yml" > "$TEST_DIR/output"
 [[ -z $(find "$TMPDIR" -mindepth 1 -print) ]] || fail 'dry-run leaked temporary state'
 echo 'ok - completed workspaces survive attachment failure and dry-run cleans up'
+
+tmux kill-session -t '=interrupted'
+if TMUXIFY_INTERRUPT_AT=new-session TMUXIFY_SIGNAL=TERM TMUXIFY_RENAME_DURING_CREATION=1 "$TMUXIFY" --detach --file "$TEST_DIR/interrupted.yml" > "$TEST_DIR/output" 2>&1; then
+  fail 'interrupted renamed creation unexpectedly succeeded'
+fi
+if tmux has-session -t '=renamed-owned' 2>/dev/null; then fail 'rollback lost track of the renamed owned session'; fi
+[[ $(tmux list-windows -t '=interrupted' -F '#{window_name}') == Replacement ]] || fail 'rollback removed a replacement session with the same name'
+echo 'ok - rollback follows native session identity across a rename'
+
+cat > "$TEST_DIR/vertical.yml" <<'YAML'
+session:
+  name: vertical
+  initial_focus: bottom
+windows:
+  - id: workspace
+    name: Sizes
+    layout:
+      type: vertical
+      splits:
+        - id: editor
+          size: 60%
+        - type: horizontal
+          size: 40%
+          splits:
+            - id: left
+              size: 50%
+            - type: vertical
+              size: 50%
+              splits:
+                - id: top
+                  size: 50%
+                - id: bottom
+                  size: 50%
+YAML
+"$TMUXIFY" --detach --no-commands --file "$TEST_DIR/vertical.yml" > "$TEST_DIR/output"
+heights=$(tmux list-panes -t '=vertical' -F '#{pane_height}' | paste -sd, -)
+[[ $heights == 48,32,15,16 ]] || fail "nested explicit-window vertical geometry is wrong: $heights"
+[[ $(tmux display-message -p -t '=vertical:' '#{pane_index}') -eq 3 ]] || fail 'geometry changes lost explicit-window focus'
+tmux set-option -g default-size 4x4
+sed 's/name: oversubscribed/name: too-small/' "$TEST_DIR/sizing.yml" > "$TEST_DIR/small.yml"
+if "$TMUXIFY" --detach --no-commands --file "$TEST_DIR/small.yml" > "$TEST_DIR/output" 2>&1; then fail 'physically impossible layout unexpectedly succeeded'; fi
+grep -q 'Not enough room' "$TEST_DIR/output" || fail 'impossible layout did not explain the size limit'
+if tmux has-session -t '=too-small' 2>/dev/null; then fail 'impossible layout left an unfinished session'; fi
+[[ -z $(find "$TMPDIR" -mindepth 1 -print) ]] || fail 'impossible layout leaked temporary state'
+echo 'ok - explicit-window vertical geometry preserves focus and impossible layouts fail cleanly'

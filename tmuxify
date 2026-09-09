@@ -22,6 +22,7 @@ RUN_COMMANDS=1
 TMP_DIR=""
 EXPORT_TEMP_FILE=""
 SESSION_CREATED=0
+CREATED_SESSION_ID=""
 SESSION_CREATING=0
 INTERRUPTED_STATUS=0
 
@@ -62,7 +63,7 @@ EOF
 
 cleanup() {
   if [ "$SESSION_CREATED" -eq 1 ]; then
-    tmux kill-session -t "=$session_name" 2>/dev/null || true
+    tmux kill-session -t "$CREATED_SESSION_ID" 2>/dev/null || true
     SESSION_CREATED=0
   fi
   if [ -n "$EXPORT_TEMP_FILE" ]; then
@@ -681,44 +682,35 @@ if [ "$original_auto_name" != "$auto_session_name" ]; then
   warn "Directory name '$original_auto_name' sanitized to '$auto_session_name' for tmux compatibility"
 fi
 
-if [ -f "$CONFIG_FILE" ]; then
-  session_name=$(yq -r '.session.name // ""' "$CONFIG_FILE")
-  if [ -z "$session_name" ] || [ "$session_name" = "null" ]; then
-    session_name="$auto_session_name"
-    info "Using auto-generated session name: $session_name"
-  else
-    original_name="$session_name"
-    session_name=$(sanitize_name "$session_name")
-    [ -n "$session_name" ] || die "Configured session name becomes empty after sanitization."
-    if [ "$original_name" != "$session_name" ]; then
-      warn "Session name '$original_name' from config sanitized to '$session_name' for tmux compatibility"
-    else
-      info "Using session name from config: $session_name"
-    fi
-  fi
-else
+session_name=$(yq -r '.session.name // ""' "$CONFIG_FILE")
+if [ -z "$session_name" ] || [ "$session_name" = "null" ]; then
   session_name="$auto_session_name"
-  info "No layout file found. Using auto-generated session name: $session_name"
+  info "Using auto-generated session name: $session_name"
+else
+  original_name="$session_name"
+  session_name=$(sanitize_name "$session_name")
+  [ -n "$session_name" ] || die "Configured session name becomes empty after sanitization."
+  if [ "$original_name" != "$session_name" ]; then
+    warn "Session name '$original_name' from config sanitized to '$session_name' for tmux compatibility"
+  else
+    info "Using session name from config: $session_name"
+  fi
 fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
   success "Configuration is valid."
   printf 'Session: %s\n' "$session_name"
-  if [ -f "$CONFIG_FILE" ]; then
-    printf 'Layout plan:\n'
-    if [ "$(yq -r 'has("windows")' "$CONFIG_FILE")" = "true" ]; then
-      window_count=$(yq -r '.windows | length' "$CONFIG_FILE")
-      i=0
-      while [ "$i" -lt "$window_count" ]; do
-        printf '  Window: %s (%s)\n' "$(yq -r ".windows[$i].id" "$CONFIG_FILE")" "$(yq -r ".windows[$i].name" "$CONFIG_FILE")"
-        print_plan_node ".windows[$i].layout" "    "
-        i=$((i + 1))
-      done
-    else
-      print_plan_node ".layout" "  "
-    fi
+  printf 'Layout plan:\n'
+  if [ "$(yq -r 'has("windows")' "$CONFIG_FILE")" = "true" ]; then
+    window_count=$(yq -r '.windows | length' "$CONFIG_FILE")
+    i=0
+    while [ "$i" -lt "$window_count" ]; do
+      printf '  Window: %s (%s)\n' "$(yq -r ".windows[$i].id" "$CONFIG_FILE")" "$(yq -r ".windows[$i].name" "$CONFIG_FILE")"
+      print_plan_node ".windows[$i].layout" "    "
+      i=$((i + 1))
+    done
   else
-    printf 'Layout plan:\n  - default 4-pane workspace\n'
+    print_plan_node ".layout" "  "
   fi
   [ "$RUN_COMMANDS" -eq 1 ] && printf 'Commands: would run configured pane commands.\n' || printf 'Commands: disabled by --no-commands.\n'
   exit 0
@@ -872,7 +864,7 @@ echo "🚀 Creating new session: $session_name"
 : > "$TMP_DIR/build_panes"
 
 SESSION_CREATING=1
-if tmux new-session -d -s "$session_name" -c "$WORKDIR"; then
+if CREATED_SESSION_ID=$(tmux new-session -d -s "$session_name" -c "$WORKDIR" -P -F '#{session_id}'); then
   SESSION_CREATED=1
 else
   SESSION_CREATING=0
@@ -881,8 +873,8 @@ fi
 SESSION_CREATING=0
 [ "$INTERRUPTED_STATUS" -eq 0 ] || exit "$INTERRUPTED_STATUS"
 info "Building layout from $CONFIG_FILE..."
-tmux_or_die tmux set-window-option -t "=$session_name:" aggressive-resize on
-root_pane=$(tmux display-message -t "=$session_name:" -p '#{pane_id}') || die "Failed to identify initial pane."
+tmux_or_die tmux set-window-option -t "$CREATED_SESSION_ID:" aggressive-resize on
+root_pane=$(tmux display-message -t "$CREATED_SESSION_ID:" -p '#{pane_id}') || die "Failed to identify initial pane."
 first_pane="$root_pane"
 if [ "$(yq -r 'has("windows")' "$CONFIG_FILE")" = "true" ]; then
   window_count=$(yq -r '.windows | length' "$CONFIG_FILE")
@@ -895,7 +887,7 @@ if [ "$(yq -r 'has("windows")' "$CONFIG_FILE")" = "true" ]; then
       native_window=$(tmux display-message -t "$window_pane" -p '#{window_id}') || die "Failed to identify initial window."
       tmux_or_die tmux rename-window -t "$native_window" "$window_name"
     else
-      window_result=$(tmux new-window -d -t "=$session_name:" -c "$WORKDIR" -n "$window_name" -P -F '#{window_id} #{pane_id}') ||
+      window_result=$(tmux new-window -d -t "$CREATED_SESSION_ID:" -c "$WORKDIR" -n "$window_name" -P -F '#{window_id} #{pane_id}') ||
         die "Failed to create configured window '$window_id'."
       native_window=${window_result%% *}
       window_pane=${window_result#* }
