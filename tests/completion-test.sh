@@ -5,7 +5,7 @@ ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 TEST_DIR=$(mktemp -d)
 trap 'rm -rf "$TEST_DIR"' EXIT
 export PATH="$ROOT_DIR:$PATH"
-# shellcheck source=../completions/tmuxify.bash
+# shellcheck source=completions/tmuxify.bash
 source "$ROOT_DIR/completions/tmuxify.bash"
 fail() { printf 'not ok - %s\n' "$*" >&2; exit 1; }
 
