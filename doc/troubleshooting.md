@@ -88,7 +88,9 @@ Tmuxify uses native tmux window and pane IDs and does not assume index zero. If 
 
 ## A creation failure occurred
 
-A detected structural failure removes the newly created partial session. If a session remains, verify whether it existed before the run or whether a pane command—not structure creation—failed later. Tmuxify cannot roll back programs after their commands were successfully sent.
+A detected structural failure or HUP/INT/TERM interruption during setup removes the newly created unfinished session and temporary files. Existing and unrelated sessions are preserved. Once setup is complete, attachment or client-switching failure leaves the workspace available to attach later. Temporary files are cleaned before handing control to tmux.
+
+Tmuxify cannot undo external side effects of programs whose commands were already sent, even when an interrupted setup removes their panes.
 
 ## Session attaches instead of rebuilding
 
@@ -119,4 +121,4 @@ tmuxify --export my-new-layout.yml
 
 ## Panes are not the exact requested size
 
-Tmux sizes depend on current terminal size and tmux's layout engine. Use `size` as a starting ratio, then adjust manually if needed.
+Sizes are allocated within each parent layout, not the whole window. Separators, minimum pane dimensions, and integer-cell rounding affect the result. Omitted sizes share the remaining space; oversubscribed percentages are fitted as ratios. See [size allocation](layout-schema.md#size-allocation). If there is not enough room for all panes, enlarge the window or reduce the splits.
