@@ -16,6 +16,8 @@ fail() { printf 'not ok - %s\n' "$*" >&2; exit 1; }
 
 tmux -f /dev/null new-session -d -s keepalive -x 161 -y 81
 tmux set-option -g default-shell /bin/bash
+# Keep host login profiles out of the controlled pane environment.
+tmux set-option -g default-command 'exec /bin/bash --noprofile --norc'
 tmux set-option -g default-size 161x81
 cat > "$TEST_DIR/bin/nvim" <<'SH'
 #!/bin/sh
@@ -24,8 +26,6 @@ sleep 60
 SH
 chmod +x "$TEST_DIR/bin/nvim"
 export PATH="$TEST_DIR/bin:$PATH"
-# New pane environments inherit PATH from the server, not this test process.
-tmux set-environment -g PATH "$PATH"
 cd "$TEST_DIR/project"
 
 "$TMUXIFY" --detach --no-commands > "$TEST_DIR/output"
@@ -63,17 +63,21 @@ hash -r
 tmux kill-session -t '=project'
 mkdir "$TEST_DIR/pane-bin"
 ln -s /usr/bin/clear "$TEST_DIR/pane-bin/clear"
-tmux set-environment -g PATH "$TEST_DIR/pane-bin"
+# tmux can inject the creating client's PATH even when its global PATH differs.
+# Set the absent-tool PATH inside the pane shell, without changing CLI dependencies.
+tmux set-option -g default-command "export PATH='$TEST_DIR/pane-bin'; exec /bin/bash --noprofile --norc"
 "$TMUXIFY" --detach > "$TEST_DIR/output"
 editor=$(tmux list-panes -t '=project' -F '#{pane_id}' | head -n 1)
+fallback_message='Install Neovim or use this shell for your editor.'
 for _ in {1..100}; do
   text=$(tmux capture-pane -p -t "$editor")
-  [[ $text == *'Install Neovim or use this shell'* ]] && break
+  grep -Fxq "$fallback_message" <<< "$text" && break
   sleep 0.05
 done
-[[ $text == *'Install Neovim or use this shell'* ]] || fail 'missing-editor fallback was not usable'
+grep -Fxq "$fallback_message" <<< "$text" || fail "missing-editor fallback was not usable; pane contents: $text"
+[[ ! -e "$HOME/editor-started" ]] || fail 'missing-editor fixture launched the editor stub'
 [[ $(tmux list-panes -t '=project' | wc -l) -eq 4 ]] || fail 'missing editor removed a pane'
-tmux set-environment -g PATH "$PATH"
+tmux set-option -g default-command 'exec /bin/bash --noprofile --norc'
 echo 'ok - built-in preview is safe and normal startup needs no Neovim'
 
 cat > "$TEST_DIR/session.yml" <<'YAML'
