@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 022
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 TEST_DIR=$(mktemp -d /tmp/tmuxify-update-test.XXXXXX)
@@ -46,6 +47,7 @@ SH
 "$TEST_DIR/install/tmuxify" --update > "$TEST_DIR/output"
 cmp -s "$TEST_DIR/candidate" "$TEST_DIR/install/tmuxify" || fail 'valid candidate was not installed'
 [[ -x "$TEST_DIR/install/tmuxify" ]] || fail 'installed candidate is not executable'
+[[ -n $(find "$TEST_DIR/install/tmuxify" -perm 0755 -print) ]] || fail 'staging changed script readability'
 [[ ! -e "$HOME/candidate-executed" ]] || fail 'validation executed the downloaded program'
 [[ -f "$XDG_CONFIG_HOME/tmuxify/layouts/examples/example.yml" ]] || fail 'update omitted examples'
 [[ -f "$XDG_CONFIG_HOME/tmuxify/completions/tmuxify.bash" && -f "$XDG_CONFIG_HOME/tmuxify/completions/_tmuxify" ]] || fail 'update omitted completions'

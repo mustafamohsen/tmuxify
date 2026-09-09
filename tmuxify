@@ -64,11 +64,11 @@ EOF
 }
 
 cleanup() {
-  if [ -n "$UPDATE_STAGE_FILE" ]; then
-    rm -f "$UPDATE_STAGE_FILE"
-  fi
   if [ -n "$EXPORT_TEMP_FILE" ]; then
     rm -f "$EXPORT_TEMP_FILE"
+  fi
+  if [ -n "$UPDATE_STAGE_FILE" ]; then
+    rm -f "$UPDATE_STAGE_FILE"
   fi
   if [ -n "$TMP_DIR" ] && [ -d "$TMP_DIR" ]; then
     rm -rf "$TMP_DIR"
@@ -283,7 +283,7 @@ safe_update() {
   # Stage alongside the install so the final rename stays on one filesystem.
   # Set permissions before publishing; a chmod failure must not damage the install.
   UPDATE_STAGE_FILE=$(mktemp "$INSTALL_DIR/.tmuxify-update.XXXXXX") || die "Failed to stage update beside $INSTALL_PATH."
-  if ! cp "$temp_file" "$UPDATE_STAGE_FILE" || ! chmod +x "$UPDATE_STAGE_FILE"; then
+  if ! cp -p "$temp_file" "$UPDATE_STAGE_FILE" || ! chmod +x "$UPDATE_STAGE_FILE"; then
     die "Failed to prepare executable update."
   fi
   backup=""
