@@ -51,7 +51,13 @@ run_expect_failure() {
   printf '%s' "$output"
 }
 
-echo "1..20"
+test_number=20
+test_count=$test_number
+for test_file in "$ROOT_DIR"/tests/*-test.sh; do
+  [[ -f "$test_file" ]] || continue
+  test_count=$((test_count + 1))
+done
+echo "1..$test_count"
 
 output=$(run_expect_success "$TMUXIFY" --help)
 assert_contains "$output" "--dry-run"
@@ -519,5 +525,11 @@ echo "ok 20 - export preserves all windows, pane structure, active focus, YAML n
 # Focused public-boundary regressions can also be run independently.
 for test_file in "$ROOT_DIR"/tests/*-test.sh; do
   [[ -f "$test_file" ]] || continue
-  bash "$test_file"
+  test_number=$((test_number + 1))
+  if bash "$test_file" 2>&1 | sed 's/^/# /'; then
+    echo "ok $test_number - ${test_file##*/}"
+  else
+    echo "not ok $test_number - ${test_file##*/}"
+    exit 1
+  fi
 done
