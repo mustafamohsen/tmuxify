@@ -23,7 +23,9 @@ def complete(text):
         setup.write_text(
             "PS1='READY> '\n"
             f"fpath=({shlex.quote(str(ROOT / 'completions'))} $fpath)\n"
-            "autoload -Uz compinit\ncompinit -D\n"
+            # CI checkout ancestors can be group-writable. Trust these known
+            # test paths without changing the user's compinit security policy.
+            "autoload -Uz compinit\ncompinit -u -D\n"
             "function test_complete {\n"
             "  zle expand-or-complete\n"
             f"  print -rn -- \"$BUFFER\" > {shlex.quote(str(result))}\n"
