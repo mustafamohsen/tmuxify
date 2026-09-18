@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.7.0] – 2026-09-18
 
 ### Added
 - Added explicit `session.pane_names.enabled: true` opt-in and optional leaf-pane `name` labels, separate from focus IDs and stable across application title updates ([#21](https://github.com/mustafamohsen/tmuxify/issues/21)). Thanks to Marco ([@fscaptain](https://github.com/fscaptain)) for the feature request.
