@@ -19,7 +19,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y tmux shellcheck curl python3
+          sudo apt-get install -y tmux shellcheck curl python3 zsh
           sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_amd64
           sudo chmod +x /usr/local/bin/yq
 
@@ -46,6 +46,9 @@ jobs:
 
       - name: Install pane-name test dependencies
         run: brew install tmux yq python
+
+      - name: Exercise zsh Tab completion
+        run: bash tests/zsh-completion-test.sh
 
       - name: Exercise pane names on the advertised Bash baseline
         shell: /bin/bash {0}

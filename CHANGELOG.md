@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.7.1] – 2026-09-18
+
+### Fixed
+- Fixed zsh Tab completion rejecting literal brace-wrapped option specifications. Each long and short alias now has a valid specification, preserving file completion ([#23](https://github.com/mustafamohsen/tmuxify/issues/23)).
+
+### Tests
+- Added real zsh Tab-completion coverage on Linux and macOS for option listing, prefix expansion, and spaced filenames with long and short file options.
+
 ## [2.7.0] – 2026-09-18
 
 ### Added

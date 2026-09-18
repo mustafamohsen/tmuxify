@@ -7,21 +7,22 @@ _tmuxify_completion_options() {
 
 _tmuxify() {
   local -a specs
-  local line opt aliases zsh_aliases kind desc
+  local line opt aliases kind desc
   specs=()
 
   while IFS= read -r line; do
     aliases=${line%%:*}
     kind=${line#*:}
     [[ $kind == $line ]] && kind=""
-    opt=${aliases%%|*}
-    zsh_aliases="{${aliases//|/,}}"
     desc="tmuxify option"
-    if [[ $kind == file ]]; then
-      specs+=("${zsh_aliases}[${desc}]:layout file:_files")
-    else
-      specs+=("${zsh_aliases}[${desc}]")
-    fi
+    # Brace expressions built inside strings are not expanded by zsh.
+    for opt in "${(@s:|:)aliases}"; do
+      if [[ $kind == file ]]; then
+        specs+=("${opt}[${desc}]:layout file:_files")
+      else
+        specs+=("${opt}[${desc}]")
+      fi
+    done
   done < <(_tmuxify_completion_options)
 
   _arguments -s $specs
