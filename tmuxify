@@ -1134,7 +1134,7 @@ build_layout() {
       current_pane="$container_pane"
     else
       remaining=$((remaining - pane_sizes[i - 1] - 1))
-      current_pane=$(tmux split-window "$split_flag" -l "$remaining" -t "$prev_pane" -c "$WORKDIR" -P -F '#{pane_id}') ||
+      current_pane=$(tmux split-window "$split_flag" -l "$remaining" -t "$prev_pane" -c "$TMUX_WORKDIR" -P -F '#{pane_id}') ||
         die "Failed to split pane $prev_pane while building $layout_path."
     fi
     record_build_pane "$layout_path" "$i" "$current_pane"
@@ -1165,6 +1165,10 @@ build_layout() {
   done
 }
 
+# Escape tmux's argv separator without changing the canonical identity root.
+TMUX_WORKDIR="$WORKDIR"
+case "$TMUX_WORKDIR" in *';') TMUX_WORKDIR="${TMUX_WORKDIR%;}\\;" ;; esac
+
 echo "🚀 Creating new session: $session_name"
 
 # reset runtime maps after validation
@@ -1172,7 +1176,7 @@ echo "🚀 Creating new session: $session_name"
 : > "$TMP_DIR/build_panes"
 
 SESSION_CREATING=1
-if CREATED_SESSION_ID=$(tmux new-session -d -s "$session_name" -c "$WORKDIR" -P -F '#{session_id}'); then
+if CREATED_SESSION_ID=$(tmux new-session -d -s "$session_name" -c "$TMUX_WORKDIR" -P -F '#{session_id}'); then
   SESSION_CREATED=1
 else
   SESSION_CREATING=0
@@ -1204,7 +1208,7 @@ if [ "$(yq -r 'has("windows")' "$CONFIG_FILE")" = "true" ]; then
       native_window=$(tmux display-message -t "$window_pane" -p '#{window_id}') || die "Failed to identify initial window."
       tmux_or_die tmux rename-window -t "$native_window" "$window_name"
     else
-      window_result=$(tmux new-window -d -t "$CREATED_SESSION_ID:" -c "$WORKDIR" -n "$window_name" -P -F '#{window_id} #{pane_id}') ||
+      window_result=$(tmux new-window -d -t "$CREATED_SESSION_ID:" -c "$TMUX_WORKDIR" -n "$window_name" -P -F '#{window_id} #{pane_id}') ||
         die "Failed to create configured window '$window_id'."
       native_window=${window_result%% *}
       window_pane=${window_result#* }

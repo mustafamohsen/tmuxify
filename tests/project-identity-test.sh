@@ -270,7 +270,7 @@ contains "$(<"$TEST_DIR/output")" 'disappeared'
 rm "$TEST_DIR/bin/tmux"
 echo 'ok - vanished targets cannot produce detached success'
 
-mkdir "$TEST_DIR/space project"
+mkdir -p "$TEST_DIR/space project;/src" "$TEST_DIR/space project;/.git"
 cat > "$TEST_DIR/cwd.yml" <<'YAML'
 session: {name: 'cwd: #literal;'}
 windows:
@@ -281,12 +281,12 @@ windows:
     name: Second
     layout: {type: vertical, splits: [{id: bottom}]}
 YAML
-run --root "$TEST_DIR/space project" --file "$TEST_DIR/cwd.yml" --detach --no-commands > "$TEST_DIR/output"
-cwd_session=$(managed_id "${project_root%/*}/space project" named 'cwd: #literal;')
+(cd "$TEST_DIR/space project;/src" && run --file "$TEST_DIR/cwd.yml" --detach --no-commands) > "$TEST_DIR/output"
+cwd_session=$(managed_id "${project_root%/*}/space project;" named 'cwd: #literal;')
 [[ -n $cwd_session ]] || fail 'literal workspace name did not survive metadata encoding'
 paths=$("$REAL_TMUX" list-panes -s -t "$cwd_session" -F '#{pane_current_path}')
 [[ $(printf '%s\n' "$paths" | wc -l | tr -d ' ') == 3 ]] || fail 'expected three panes across two windows'
-[[ $(printf '%s\n' "$paths" | sort -u) == "${project_root%/*}/space project" ]] || fail 'multi-window root was not applied to every pane'
+[[ $(printf '%s\n' "$paths" | sort -u) == "${project_root%/*}/space project;" ]] || fail 'multi-window root was not applied to every pane'
 echo 'ok - all windows use the explicit root and workspace names stay literal data'
 inactive=$("$REAL_TMUX" list-panes -s -t "$cwd_session" -F '#{pane_id}' | tail -n 1)
 export_managed "$cwd_session" "$TEST_DIR/export-inactive.yml" "$inactive"
