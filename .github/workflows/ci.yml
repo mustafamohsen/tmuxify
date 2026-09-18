@@ -19,7 +19,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y tmux shellcheck curl
+          sudo apt-get install -y tmux shellcheck curl python3
           sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_amd64
           sudo chmod +x /usr/local/bin/yq
 
@@ -43,3 +43,10 @@ jobs:
           test "${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}" = 3.2
           /bin/bash -n tmuxify
           /bin/bash tests/completion-test.sh
+
+      - name: Install pane-name test dependencies
+        run: brew install tmux yq python
+
+      - name: Exercise pane names on the advertised Bash baseline
+        shell: /bin/bash {0}
+        run: TMUXIFY_BASH=/bin/bash /bin/bash tests/pane-names-test.sh
