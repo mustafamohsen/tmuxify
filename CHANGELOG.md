@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [3.0.0] – 2026-09-18
 
 ### Breaking changes
 - `session.name` now selects a workspace within a canonical project root, not a literal server-wide tmux name. Scripts targeting old session names must use the reported concrete name instead.

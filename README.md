@@ -226,7 +226,7 @@ Contributions are welcome and appreciated.
 
 Tmuxify v2+ uses recursive layouts and still provides a useful default when no configuration is selected. Version 2.6.0 adds explicit one/multiple-window layouts without removing or deprecating legacy top-level `layout` files; existing valid files require no migration.
 
-**Breaking change (Unreleased):** project identity changes the naming/lookup contract and working directories for subdirectory launches. Scripts targeting literal `session.name` values must use the reported concrete tmux names instead. Old unscoped sessions are left untouched, not adopted. The first new launch may start another copy of their programs; preview and consider `--no-commands` during migration. See [migration guidance](doc/configuration.md#compatibility-and-migration). Layout geometry and commands are not reconciled on reuse.
+**Breaking change in v3.0.0:** project identity changes the naming/lookup contract and working directories for subdirectory launches. Scripts targeting literal `session.name` values must use the reported concrete tmux names instead. Old unscoped sessions are left untouched, not adopted. The first new launch may start another copy of their programs; preview and consider `--no-commands` during migration. See [migration guidance](doc/configuration.md#compatibility-and-migration). Layout geometry and commands are not reconciled on reuse.
 
 ## License
 
