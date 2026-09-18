@@ -29,6 +29,7 @@ UPDATE_STAGE_FILE=""
 SESSION_CREATED=0
 CREATED_SESSION_ID=""
 SESSION_CREATING=0
+SESSION_COMMITTING=0
 INTERRUPTED_STATUS=0
 
 info() { printf '%s\n' "ℹ️ $*"; }
@@ -91,7 +92,7 @@ cleanup() {
 handle_signal() {
   # A signal may arrive after tmux created the session but before ownership was
   # recorded. Finish that one transition before exiting and rolling back.
-  if [ "$SESSION_CREATING" -eq 1 ]; then
+  if [ "$SESSION_CREATING" -eq 1 ] || [ "$SESSION_COMMITTING" -eq 1 ]; then
     INTERRUPTED_STATUS="$1"
   else
     exit "$1"
@@ -468,6 +469,116 @@ sanitize_name() {
   printf '%s' "$1" | sed 's/\./_/g; s/[^a-zA-Z0-9_-][^a-zA-Z0-9_-]*/_/g; s/^_//; s/_$//'
 }
 
+derive_workspace_identity() {
+  local session_type name_type project_label workspace_label checksum roundtrip
+  session_type=$(yq -r '.session | tag' "$CONFIG_FILE") || die "Cannot read session configuration."
+  case "$session_type" in '!!map'|'!!null') ;; *) die "session must be a mapping or null." ;; esac
+  name_type=$(yq -r '.session.name | tag' "$CONFIG_FILE") || die "Cannot read workspace name."
+  case "$name_type" in '!!str'|'!!null') ;; *) die "session.name must be a string or null." ;; esac
+  if [ "$name_type" = '!!str' ] && [ "$(yq -r '.session.name | test("[\x00-\x1f\x7f-\x9f]")' "$CONFIG_FILE")" != false ]; then
+    die "session.name must not contain control characters."
+  fi
+  WORKSPACE_NAME=$(yq -r '.session.name // ""' "$CONFIG_FILE") || die "Cannot read workspace name."
+  WORKSPACE_KIND=default
+  [ -z "$WORKSPACE_NAME" ] || WORKSPACE_KIND=named
+  WORKSPACE_IDENTITY=$(IDENTITY_ROOT="$WORKDIR" IDENTITY_KIND="$WORKSPACE_KIND" IDENTITY_NAME="$WORKSPACE_NAME" \
+    yq -n -o=json -I=0 '["tmuxify-workspace-v1", strenv(IDENTITY_ROOT), strenv(IDENTITY_KIND), strenv(IDENTITY_NAME)]') || die "Cannot encode workspace identity."
+  roundtrip=$(printf '%s' "$WORKSPACE_IDENTITY" | yq -p=json -r '.[1]') || die "Cannot decode project root."
+  [ "$roundtrip" = "$WORKDIR" ] || die "Project root must be valid UTF-8."
+  if [ "$(printf '%s' "$WORKSPACE_IDENTITY" | yq -p=json -r '.[1] | test("[\x00-\x1f\x7f-\x9f]")')" != false ]; then
+    die "Project paths must not contain control characters."
+  fi
+  project_label=$(sanitize_name "${WORKDIR##*/}" | LC_ALL=C cut -c1-24)
+  [ "$WORKDIR" != / ] || project_label=root
+  project_label=${project_label:-project}
+  workspace_label=default
+  if [ "$WORKSPACE_KIND" = named ]; then
+    workspace_label=$(sanitize_name "$WORKSPACE_NAME" | LC_ALL=C cut -c1-24)
+    workspace_label=${workspace_label:-workspace}
+    legacy_session_name=$(sanitize_name "$WORKSPACE_NAME")
+  else
+    legacy_session_name=$(sanitize_name "${WORKDIR##*/}")
+    [ "$WORKDIR" != / ] || legacy_session_name=root
+    legacy_session_name=${legacy_session_name:-tmuxify_session}
+  fi
+  checksum=$(printf '%s\0' tmuxify-workspace-v1 "$WORKDIR" "$WORKSPACE_KIND" "$WORKSPACE_NAME" | cksum) || die "cksum is required for workspace naming."
+  printf -v session_name '%s--%s--%08x' "$project_label" "$workspace_label" "${checksum%% *}"
+}
+
+# Normalize only the supported identity shape. Missing/malformed metadata is not
+# evidence of ownership. All comparisons use full fields, never the CRC suffix.
+normalize_identity() {
+  printf '%s' "$1" | yq -p=json -e -o=json -I=0 'select(
+    tag == "!!seq" and length == 4 and .[0] == "tmuxify-workspace-v1" and
+    (.[1] | tag) == "!!str" and (.[1] | test("^/")) and
+    (.[1] | test("[\x00-\x1f\x7f-\x9f]") | not) and
+    (.[3] | tag) == "!!str" and (.[3] | test("[\x00-\x1f\x7f-\x9f]") | not) and
+    ((.[2] == "default" and .[3] == "") or (.[2] == "named" and .[3] != ""))
+  )' 2>/dev/null
+}
+
+session_option() {
+  # Without -g/-A, show-options reads only session-local options (also on 2.1).
+  tmux show-options -qv -t "$1" "$2" || die "Failed to read workspace metadata for $1."
+}
+
+resolve_workspace_session() {
+  local native_session metadata normalized actual_name state matches occupied error
+  MATCHING_SESSION_ID=""
+  LEGACY_SESSION_NAME=""
+  matches=0
+  occupied=0
+  if ! LC_ALL=C tmux list-sessions -F '#{session_id}' > "$TMP_DIR/sessions" 2> "$TMP_DIR/inventory-error"; then
+    error=$(< "$TMP_DIR/inventory-error")
+    case "$error" in
+      'no server running on '*|'error connecting to '*' (No such file or directory)'|'error connecting to '*' (Connection refused)') return ;;
+      *) die "Cannot inspect tmux sessions: $error" ;;
+    esac
+  fi
+  while IFS= read -r native_session; do
+    metadata=$(session_option "$native_session" @tmuxify_workspace_identity) || exit 1
+    normalized=""
+    [ -z "$metadata" ] || normalized=$(normalize_identity "$metadata" || true)
+    if [ "$normalized" = "$WORKSPACE_IDENTITY" ]; then
+      matches=$((matches + 1))
+      MATCHING_SESSION_ID="$native_session"
+    fi
+    actual_name=$(tmux display-message -p -t "$native_session" '#{session_name}') || die "Cannot inspect session $native_session."
+    [ -n "$actual_name" ] || die "Session $native_session disappeared during workspace lookup."
+    [ "$actual_name" != "$session_name" ] || occupied=1
+    if [ -z "$metadata" ] && [ "$actual_name" = "$legacy_session_name" ]; then
+      LEGACY_SESSION_NAME="$actual_name"
+    fi
+  done < "$TMP_DIR/sessions"
+  [ "$matches" -le 1 ] || die "Multiple sessions claim this workspace identity; inspect them with tmux before retrying."
+  if [ "$matches" -eq 1 ]; then
+    state=$(session_option "$MATCHING_SESSION_ID" @tmuxify_workspace_state) || exit 1
+    [ "$state" = ready ] || die "Workspace $MATCHING_SESSION_ID is building or has invalid readiness; inspect it or retry later."
+  elif [ "$occupied" -eq 1 ]; then
+    die "Session name '$session_name' is occupied without a matching identity. Nothing was adopted or changed."
+  fi
+}
+
+commit_workspace() {
+  local state
+  SESSION_COMMITTING=1
+  if tmux set-option -t "$CREATED_SESSION_ID" @tmuxify_workspace_state ready; then
+    SESSION_CREATED=0
+  else
+    # A failed acknowledgement does not prove the publication failed. Preserve
+    # a ready session, or one whose commit outcome cannot be inspected safely.
+    if state=$(tmux show-options -qv -t "$CREATED_SESSION_ID" @tmuxify_workspace_state); then
+      [ "$state" != ready ] || SESSION_CREATED=0
+    else
+      SESSION_CREATED=0
+    fi
+    SESSION_COMMITTING=0
+    die "Failed to confirm workspace readiness; inspect session $CREATED_SESSION_ID if retained."
+  fi
+  SESSION_COMMITTING=0
+  [ "$INTERRUPTED_STATUS" -eq 0 ] || exit "$INTERRUPTED_STATUS"
+}
+
 init_tmp_dir() {
   if [ -z "$TMP_DIR" ]; then
     TMP_DIR=$(mktemp -d 2>/dev/null || mktemp -d -t tmuxify) || die "Failed to create temporary directory."
@@ -704,10 +815,26 @@ yaml_scalar() {
 
 export_session() {
   local current_session safe_session export_dir export_base temp_export active_pane window_count window_number native_window window_name pane_count pane_number native_pane focus_id
+  local current_id metadata identity export_name
+  local -a export_target
+  export_target=()
+  [ -z "${TMUX_PANE:-}" ] || export_target=(-t "$TMUX_PANE")
   command -v tmux >/dev/null || die "tmux is required for --export."
   [ -n "$TMUX" ] || die "Not currently in a tmux session. Please run this inside tmux."
 
-  current_session=$(tmux display-message -p '#{session_name}') || die "Failed to read current tmux session."
+  current_session=$(tmux display-message -p "${export_target[@]}" '#{session_name}') || die "Failed to read current tmux session."
+  current_id=$(tmux display-message -p "${export_target[@]}" '#{session_id}') || die "Failed to identify current tmux session."
+  [ -n "$current_session" ] && [ -n "$current_id" ] || die "Current tmux session disappeared."
+  metadata=$(session_option "$current_id" @tmuxify_workspace_identity) || exit 1
+  export_name=$(yaml_scalar "$current_session")
+  if [ -n "$metadata" ]; then
+    identity=$(normalize_identity "$metadata") || die "Cannot export malformed or unsupported workspace identity."
+    if [ "$(printf '%s' "$identity" | yq -p=json -r '.[2]')" = default ]; then
+      export_name=null
+    else
+      export_name=$(printf '%s' "$identity" | yq -p=json -o=json -I=0 '.[3]') || die "Cannot export workspace name."
+    fi
+  fi
   if [ -z "$EXPORT_FILENAME" ]; then
     safe_session=$(sanitize_name "$current_session")
     [ -n "$safe_session" ] || safe_session="tmuxify"
@@ -729,9 +856,9 @@ export_session() {
   EXPORT_TEMP_FILE="$temp_export"
   info "Exporting current session '$current_session' layout to $EXPORT_FILENAME..."
 
-  active_pane=$(tmux display-message -p '#{pane_id}') || die "Failed to read active pane."
+  active_pane=$(tmux display-message -p "${export_target[@]}" '#{pane_id}') || die "Failed to read active pane."
   init_tmp_dir
-  tmux list-windows -t "=$current_session" -F '#{window_id}' > "$TMP_DIR/export_windows" || die "Failed to read window list."
+  tmux list-windows -t "$current_id" -F '#{window_id}' > "$TMP_DIR/export_windows" || die "Failed to read window list."
   window_count=$(wc -l < "$TMP_DIR/export_windows" | tr -d ' ')
   [ "$window_count" -gt 0 ] 2>/dev/null || die "Current session has no windows."
 
@@ -752,9 +879,9 @@ export_session() {
   [ -n "$focus_id" ] || die "Failed to identify active pane in current session."
 
   {
-    printf '# Simplified starter layout exported by tmuxify from session %s\n' "$(yaml_scalar "$current_session")"
+    printf '# Simplified starter layout exported by tmuxify\n'
     printf '# Generated on %s\n\n' "$(date)"
-    printf 'session:\n  name: %s\n  initial_focus: %s\n\n' "$(yaml_scalar "$current_session")" "$focus_id"
+    printf 'session:\n  name: %s\n  initial_focus: %s\n\n' "$export_name" "$focus_id"
     printf 'windows:\n'
     window_number=1
     while IFS= read -r native_window; do
@@ -821,35 +948,15 @@ fi
 
 validate_config
 
-# Generate session name from directory path
-auto_session_name=$(basename "$WORKDIR")
-[ "$auto_session_name" = "/" ] && auto_session_name="root"
-original_auto_name="$auto_session_name"
-auto_session_name=$(sanitize_name "$auto_session_name")
-[ -n "$auto_session_name" ] || auto_session_name="tmuxify_session"
-if [ "$original_auto_name" != "$auto_session_name" ]; then
-  warn "Directory name '$original_auto_name' sanitized to '$auto_session_name' for tmux compatibility"
-fi
-
-session_name=$(yq -r '.session.name // ""' "$CONFIG_FILE")
-if [ -z "$session_name" ] || [ "$session_name" = "null" ]; then
-  session_name="$auto_session_name"
-  info "Using auto-generated session name: $session_name"
-else
-  original_name="$session_name"
-  session_name=$(sanitize_name "$session_name")
-  [ -n "$session_name" ] || die "Configured session name becomes empty after sanitization."
-  if [ "$original_name" != "$session_name" ]; then
-    warn "Session name '$original_name' from config sanitized to '$session_name' for tmux compatibility"
-  else
-    info "Using session name from config: $session_name"
-  fi
-fi
+derive_workspace_identity
 
 if [ "$DRY_RUN" -eq 1 ]; then
   success "Configuration is valid."
   printf 'Project root: %s\nRoot source: %s\nLayout source: %s\n' "$WORKDIR" "$ROOT_SOURCE" "$CONFIG_SOURCE"
-  printf 'Session: %s\n' "$session_name"
+  printf 'Workspace: %s' "$WORKSPACE_KIND"
+  [ "$WORKSPACE_KIND" != named ] || printf ' %s' "$(yaml_scalar "$WORKSPACE_NAME")"
+  printf '\nProposed tmux session: %s\n' "$session_name"
+  printf 'Existing sessions are not inspected; a matching runtime session will be reused unchanged.\n'
   if [ "$PANE_NAMES_ENABLED" -eq 1 ]; then
     printf 'Pane names: enabled (border: %s; requires tmux 3.2+)\n' "$PANE_NAMES_BORDER"
   fi
@@ -877,24 +984,30 @@ if [ "$TMUX_MAJOR" -lt 2 ] || { [ "$TMUX_MAJOR" -eq 2 ] && [ "$TMUX_MINOR" -lt 1
 fi
 
 attach_or_switch() {
-  local target_session
+  local target_session actual_name quoted_target
   target_session="$1"
-  # Construction is committed; attachment failure must not destroy the workspace.
+  actual_name=$(tmux display-message -p -t "$target_session" '#{session_name}') || die "Workspace disappeared before attachment."
+  [ -n "$actual_name" ] || die "Workspace disappeared before attachment."
   SESSION_CREATED=0
   cleanup
   if [ "$DETACH" -eq 1 ]; then
-    success "Session '$target_session' is ready. Attach with: tmux attach -t $target_session"
+    printf -v quoted_target '%q' "=$actual_name"
+    success "Session '$actual_name' is ready for project $WORKDIR. Attach with: tmux attach -t $quoted_target"
     exit 0
   fi
   if [ -n "$TMUX" ]; then
-    exec tmux switch-client -t "=$target_session"
+    exec tmux switch-client -t "$target_session"
   fi
-  exec tmux attach -t "=$target_session"
+  exec tmux attach -t "$target_session"
 }
 
-if tmux has-session -t "=$session_name" 2>/dev/null; then
-  success "Attaching to existing session: $session_name"
-  attach_or_switch "$session_name"
+resolve_workspace_session
+if [ -n "$MATCHING_SESSION_ID" ]; then
+  info "Reusing workspace $MATCHING_SESSION_ID unchanged."
+  attach_or_switch "$MATCHING_SESSION_ID"
+fi
+if [ -n "$LEGACY_SESSION_NAME" ]; then
+  warn "Unmanaged session '$LEGACY_SESSION_NAME' was left untouched. New workspace commands may duplicate running programs; use --no-commands to inspect first."
 fi
 
 # Pane-local options need 3.0, but literal style escaping also needs tmux 3.2.
@@ -1057,10 +1170,19 @@ if CREATED_SESSION_ID=$(tmux new-session -d -s "$session_name" -c "$WORKDIR" -P 
   SESSION_CREATED=1
 else
   SESSION_CREATING=0
-  die "Failed to create session '$session_name'."
+  [ "$INTERRUPTED_STATUS" -eq 0 ] || exit "$INTERRUPTED_STATUS"
+  resolve_workspace_session
+  if [ -n "$MATCHING_SESSION_ID" ]; then
+    attach_or_switch "$MATCHING_SESSION_ID"
+  fi
+  die "Failed to create session '$session_name'; another launch may be building it. Retry later."
 fi
 SESSION_CREATING=0
 [ "$INTERRUPTED_STATUS" -eq 0 ] || exit "$INTERRUPTED_STATUS"
+tmux_or_die tmux set-option -t "$CREATED_SESSION_ID" @tmuxify_workspace_identity "$WORKSPACE_IDENTITY"
+tmux_or_die tmux set-option -t "$CREATED_SESSION_ID" @tmuxify_workspace_state building
+[ "$(session_option "$CREATED_SESSION_ID" @tmuxify_workspace_identity)" = "$WORKSPACE_IDENTITY" ] &&
+  [ "$(session_option "$CREATED_SESSION_ID" @tmuxify_workspace_state)" = building ] || die "Failed to verify new workspace metadata."
 info "Building layout from $CONFIG_SOURCE..."
 tmux_or_die tmux set-window-option -t "$CREATED_SESSION_ID:" aggressive-resize on
 root_pane=$(tmux display-message -t "$CREATED_SESSION_ID:" -p '#{pane_id}') || die "Failed to identify initial pane."
@@ -1115,5 +1237,6 @@ fi
 tmux_or_die tmux select-window -t "$focus_window"
 tmux_or_die tmux select-pane -t "$focus_pane"
 
+commit_workspace
 success "Session '$session_name' created successfully."
-attach_or_switch "$session_name"
+attach_or_switch "$CREATED_SESSION_ID"

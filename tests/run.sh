@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 TMUXIFY="$ROOT_DIR/tmuxify"
+# shellcheck source=tests/workspace-helpers.sh
+source "$ROOT_DIR/tests/workspace-helpers.sh"
 TEST_PREFIX="tmuxify_ci_$$"
 TMP_DIR=$(mktemp -d /tmp/tmuxify-suite.XXXXXX)
 export HOME="$TMP_DIR/home" XDG_CONFIG_HOME="$TMP_DIR/config" TMUX_TMPDIR="$TMP_DIR"
@@ -161,10 +163,11 @@ assert_contains "$output" "Duplicate pane id"
 echo "ok 7 - duplicate pane IDs are rejected"
 
 run_expect_success "$TMUXIFY" --file "$TMP_DIR/valid.yml" --detach --no-commands >/dev/null
-pane_count=$(tmux list-panes -t "${TEST_PREFIX}_nested" | wc -l | tr -d ' ')
+nested_session=$(workspace_session "${TEST_PREFIX}_nested")
+pane_count=$(tmux list-panes -t "$nested_session" | wc -l | tr -d ' ')
 [[ "$pane_count" == "4" ]] || fail "expected 4 panes, got $pane_count"
-active_pane=$(tmux display-message -p -t "${TEST_PREFIX}_nested" '#{pane_index}')
-first_pane=$(tmux list-panes -t "${TEST_PREFIX}_nested" -F '#{pane_index}' | head -n 1)
+active_pane=$(tmux display-message -p -t "$nested_session:" '#{pane_index}')
+first_pane=$(tmux list-panes -t "$nested_session" -F '#{pane_index}' | head -n 1)
 [[ "$active_pane" == "$first_pane" ]] || fail "expected editor pane to be active, got pane $active_pane"
 echo "ok 8 - detached nested session creates expected panes and focus"
 
@@ -187,11 +190,12 @@ env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux new-session -d -s "${TEST_PRE
 env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux set-option -g base-index 1
 env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux set-window-option -g pane-base-index 1
 run_expect_success env -u TMUX TMUX_TMPDIR="$base_index_sockdir" "$TMUXIFY" --file "$TMP_DIR/base-index.yml" --detach --no-commands >/dev/null
-window_index=$(env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux list-windows -t "${TEST_PREFIX}_base_index" -F '#{window_index}')
+base_index_session=$(TMUX_TMPDIR="$base_index_sockdir" workspace_session "${TEST_PREFIX}_base_index")
+window_index=$(env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux list-windows -t "$base_index_session" -F '#{window_index}')
 [[ "$window_index" == "1" ]] || fail "expected first window index 1 with base-index enabled, got $window_index"
-pane_count=$(env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux list-panes -t "${TEST_PREFIX}_base_index" | wc -l | tr -d ' ')
+pane_count=$(env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux list-panes -t "$base_index_session" | wc -l | tr -d ' ')
 [[ "$pane_count" == "2" ]] || fail "expected 2 panes with base-index enabled, got $pane_count"
-pane_indices=$(env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux list-panes -t "${TEST_PREFIX}_base_index" -F '#{pane_index}' | paste -sd, -)
+pane_indices=$(env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux list-panes -t "$base_index_session" -F '#{pane_index}' | paste -sd, -)
 [[ "$pane_indices" == "1,2" ]] || fail "expected pane indices 1,2 with pane-base-index enabled, got $pane_indices"
 env -u TMUX TMUX_TMPDIR="$base_index_sockdir" tmux kill-server >/dev/null 2>&1 || true
 echo "ok 9 - detached session works with tmux base-index 1"
@@ -213,7 +217,7 @@ YAML
 # shellcheck disable=SC2016 # Positional parameters intentionally expand in the child bash.
 output=$(run_expect_success env XDG_CONFIG_HOME="$xdg_home" bash -c 'cd "$1" && "$2" --dry-run' _ "$global_project" "$TMUXIFY")
 assert_contains "$output" "Using global default layout file"
-assert_contains "$output" "Session: ${TEST_PREFIX}_global_default"
+assert_contains "$output" "Workspace: named \"${TEST_PREFIX}_global_default\""
 echo "ok 10 - global default layout is used when project config is absent"
 
 cat > "$global_project/.tmuxify.yml" <<YAML
@@ -229,7 +233,7 @@ layout:
 YAML
 # shellcheck disable=SC2016 # Positional parameters intentionally expand in the child bash.
 output=$(run_expect_success env XDG_CONFIG_HOME="$xdg_home" bash -c 'cd "$1" && "$2" --dry-run' _ "$global_project" "$TMUXIFY")
-assert_contains "$output" "Session: ${TEST_PREFIX}_project_override"
+assert_contains "$output" "Workspace: named \"${TEST_PREFIX}_project_override\""
 echo "ok 11 - project layout overrides global default layout"
 
 cat > "$TMP_DIR/file-override.yml" <<YAML
@@ -245,7 +249,7 @@ layout:
 YAML
 # shellcheck disable=SC2016 # Positional parameters intentionally expand in the child bash.
 output=$(run_expect_success env XDG_CONFIG_HOME="$xdg_home" bash -c 'cd "$1" && "$2" --dry-run --file "$3"' _ "$global_project" "$TMUXIFY" "$TMP_DIR/file-override.yml")
-assert_contains "$output" "Session: ${TEST_PREFIX}_file_override"
+assert_contains "$output" "Workspace: named \"${TEST_PREFIX}_file_override\""
 echo "ok 12 - explicit file layout overrides project and global layouts"
 
 update_install_dir="$TMP_DIR/update-install"
@@ -312,14 +316,15 @@ YAML
 output=$(run_expect_success "$TMUXIFY" --dry-run --file "$TMP_DIR/one-window.yml")
 assert_contains "$output" "Window: workspace (Development)"
 run_expect_success "$TMUXIFY" --file "$TMP_DIR/one-window.yml" --detach --no-commands >/dev/null
-window_count=$(tmux list-windows -t "${TEST_PREFIX}_one_window" | wc -l | tr -d ' ')
+one_session=$(workspace_session "${TEST_PREFIX}_one_window")
+window_count=$(tmux list-windows -t "$one_session" | wc -l | tr -d ' ')
 [[ "$window_count" == "1" ]] || fail "expected one configured window, got $window_count"
-window_name=$(tmux display-message -p -t "${TEST_PREFIX}_one_window" '#{window_name}')
+window_name=$(tmux display-message -p -t "$one_session:" '#{window_name}')
 [[ "$window_name" == "Development" ]] || fail "expected configured window name Development, got $window_name"
-pane_count=$(tmux list-panes -t "${TEST_PREFIX}_one_window" | wc -l | tr -d ' ')
+pane_count=$(tmux list-panes -t "$one_session" | wc -l | tr -d ' ')
 [[ "$pane_count" == "2" ]] || fail "expected 2 panes in configured window, got $pane_count"
-active_pane=$(tmux display-message -p -t "${TEST_PREFIX}_one_window" '#{pane_id}')
-first_pane=$(tmux list-panes -t "${TEST_PREFIX}_one_window" -F '#{pane_id}' | head -n 1)
+active_pane=$(tmux display-message -p -t "$one_session:" '#{pane_id}')
+first_pane=$(tmux list-panes -t "$one_session" -F '#{pane_id}' | head -n 1)
 [[ "$active_pane" == "$first_pane" ]] || fail "expected window focus to select its first pane"
 
 for invalid_case in empty nonsequence mixed missing badid badname nolayout collision duplicate_windows cross_window_collision; do
@@ -377,17 +382,18 @@ assert_contains "$output" "Window: operations (Operations)"
 assert_contains "$output" "command=printf editor"
 assert_contains "$output" "command=printf logs"
 run_expect_success "$TMUXIFY" --file "$TMP_DIR/multi-window.yml" --detach >/dev/null
-window_names=$(tmux list-windows -t "${TEST_PREFIX}_multi_window" -F '#{window_name}' | paste -sd, -)
+multi_session=$(workspace_session "${TEST_PREFIX}_multi_window")
+window_names=$(tmux list-windows -t "$multi_session" -F '#{window_name}' | paste -sd, -)
 [[ "$window_names" == "Development,Operations" ]] || fail "expected windows in declaration order, got $window_names"
-pane_counts=$(tmux list-windows -t "${TEST_PREFIX}_multi_window" -F '#{window_id}' | while read -r window; do tmux list-panes -t "$window" -F '#{pane_id}' | wc -l | tr -d ' '; done | paste -sd, -)
+pane_counts=$(tmux list-windows -t "$multi_session" -F '#{window_id}' | while read -r window; do tmux list-panes -t "$window" -F '#{pane_id}' | wc -l | tr -d ' '; done | paste -sd, -)
 [[ "$pane_counts" == "2,3" ]] || fail "expected pane counts 2,3, got $pane_counts"
 for marker in editor-command logs-command; do
   for _ in {1..20}; do [[ -f "$TMP_DIR/$marker" ]] && break; sleep 0.05; done
   [[ -f "$TMP_DIR/$marker" ]] || fail "expected routed command marker $marker"
 done
-active_window=$(tmux display-message -p -t "${TEST_PREFIX}_multi_window" '#{window_name}')
-active_pane=$(tmux display-message -p -t "${TEST_PREFIX}_multi_window" '#{pane_id}')
-logs_pane=$(tmux list-panes -t "${TEST_PREFIX}_multi_window:Operations" -F '#{pane_id} #{pane_current_command}' | awk '$2 == "sleep" { print $1 }' | head -n 1)
+active_window=$(tmux display-message -p -t "$multi_session:" '#{window_name}')
+active_pane=$(tmux display-message -p -t "$multi_session:" '#{pane_id}')
+logs_pane=$(tmux list-panes -t "$multi_session:Operations" -F '#{pane_id} #{pane_current_command}' | awk '$2 == "sleep" { print $1 }' | head -n 1)
 [[ "$active_window" == "Operations" ]] || fail "expected Operations focused, got $active_window"
 [[ -n "$logs_pane" && "$active_pane" == "$logs_pane" ]] || fail "expected configured logs pane focused"
 
@@ -399,16 +405,18 @@ sleep 0.1
 
 sed -e '/initial_focus: logs/d' -e "s/${TEST_PREFIX}_multi_window/${TEST_PREFIX}_multi_window_default/" "$TMP_DIR/multi-window.yml" > "$TMP_DIR/multi-window-default.yml"
 run_expect_success "$TMUXIFY" --file "$TMP_DIR/multi-window-default.yml" --detach --no-commands >/dev/null
-default_window=$(tmux display-message -p -t "${TEST_PREFIX}_multi_window_default" '#{window_name}')
-default_active_pane=$(tmux display-message -p -t "${TEST_PREFIX}_multi_window_default" '#{pane_id}')
-default_first_pane=$(tmux list-panes -t "${TEST_PREFIX}_multi_window_default:Development" -F '#{pane_id}' | head -n 1)
+default_session=$(workspace_session "${TEST_PREFIX}_multi_window_default")
+default_window=$(tmux display-message -p -t "$default_session:" '#{window_name}')
+default_active_pane=$(tmux display-message -p -t "$default_session:" '#{pane_id}')
+default_first_pane=$(tmux list-panes -t "$default_session:Development" -F '#{pane_id}' | head -n 1)
 [[ "$default_window" == "Development" && "$default_active_pane" == "$default_first_pane" ]] || fail "expected omitted focus to restore first window and pane"
 
 sed -e 's/initial_focus: logs/initial_focus: operations/' -e "s/${TEST_PREFIX}_multi_window/${TEST_PREFIX}_multi_window_window_focus/" "$TMP_DIR/multi-window.yml" > "$TMP_DIR/multi-window-window-focus.yml"
 run_expect_success "$TMUXIFY" --file "$TMP_DIR/multi-window-window-focus.yml" --detach --no-commands >/dev/null
-window_focus_window=$(tmux display-message -p -t "${TEST_PREFIX}_multi_window_window_focus" '#{window_name}')
-window_focus_active_pane=$(tmux display-message -p -t "${TEST_PREFIX}_multi_window_window_focus" '#{pane_id}')
-window_focus_first_pane=$(tmux list-panes -t "${TEST_PREFIX}_multi_window_window_focus:Operations" -F '#{pane_id}' | head -n 1)
+window_focus_session=$(workspace_session "${TEST_PREFIX}_multi_window_window_focus")
+window_focus_window=$(tmux display-message -p -t "$window_focus_session:" '#{window_name}')
+window_focus_active_pane=$(tmux display-message -p -t "$window_focus_session:" '#{pane_id}')
+window_focus_first_pane=$(tmux list-panes -t "$window_focus_session:Operations" -F '#{pane_id}' | head -n 1)
 [[ "$window_focus_window" == "Operations" && "$window_focus_active_pane" == "$window_focus_first_pane" ]] || fail "expected operations window ID to focus its first pane"
 
 echo "ok 18 - public CLI builds multiple windows, validates IDs, routes commands, and focuses across windows"
@@ -431,7 +439,7 @@ windows:
       splits:
         - id: first-pane
         - id: first-shell
-          command: "tmux list-windows -t ${TEST_PREFIX}_portable -F '#{window_id}' > '$TMP_DIR/command-windows'; tmux list-panes -a -F '#{session_name}' > '$TMP_DIR/command-panes'"
+          command: "tmux list-windows -F '#{window_id}' > '$TMP_DIR/command-windows'; tmux list-panes -a -F '#{session_name}' > '$TMP_DIR/command-panes'"
   - id: second
     name: Repeated
     layout:
@@ -441,25 +449,26 @@ windows:
         - id: second-pane
 YAML
 run_expect_success env -u TMUX TMUX_TMPDIR="$portable_sockdir" "$TMUXIFY" --file "$TMP_DIR/portable.yml" --detach >/dev/null
-portable_windows=$(env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux list-windows -t "${TEST_PREFIX}_portable" -F '#{window_index}' | paste -sd, -)
+portable_session=$(TMUX_TMPDIR="$portable_sockdir" workspace_session "${TEST_PREFIX}_portable")
+portable_windows=$(env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux list-windows -t "$portable_session" -F '#{window_index}' | paste -sd, -)
 [[ "$portable_windows" == "4,5" ]] || fail "expected portable window indexes 4,5, got $portable_windows"
-portable_panes=$(env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux list-panes -a -F '#{session_name} #{pane_index}' | awk -v session="${TEST_PREFIX}_portable" '$1 == session { print $2 }' | sort -n | paste -sd, -)
+portable_panes=$(env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux list-panes -a -F '#{session_name} #{pane_index}' | awk -v session="$portable_session" '$1 == session { print $2 }' | sort -n | paste -sd, -)
 [[ "$portable_panes" == "3,3,4,4" ]] || fail "expected pane base indexes per window, got $portable_panes"
-portable_active_window=$(env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux display-message -p -t "${TEST_PREFIX}_portable" '#{window_index}')
-portable_active_pane=$(env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux display-message -p -t "${TEST_PREFIX}_portable" '#{pane_index}')
+portable_active_window=$(env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux display-message -p -t "$portable_session:" '#{window_index}')
+portable_active_pane=$(env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux display-message -p -t "$portable_session:" '#{pane_index}')
 [[ "$portable_active_window" == "5" && "$portable_active_pane" == "4" ]] || fail "expected native-ID focus at 5.4, got $portable_active_window.$portable_active_pane"
 for _ in {1..100}; do [[ -f "$TMP_DIR/command-panes" ]] && break; sleep 0.05; done
 [[ -f "$TMP_DIR/command-windows" && -f "$TMP_DIR/command-panes" ]] || fail "expected configured structure-check command to run"
 [[ "$(wc -l < "$TMP_DIR/command-windows" | tr -d ' ')" == "2" ]] || fail "expected command to observe both windows"
-command_pane_count=$(grep -c "^${TEST_PREFIX}_portable$" "$TMP_DIR/command-panes")
+command_pane_count=$(grep -Fxc "$portable_session" "$TMP_DIR/command-panes")
 [[ "$command_pane_count" == "4" ]] || fail "expected command to observe all four panes, got $command_pane_count"
 
-env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux kill-session -t "${TEST_PREFIX}_portable"
+env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux kill-session -t "$portable_session"
 mkdir -p "$TMP_DIR/failing-bin"
 real_tmux=$(command -v tmux)
 cat > "$TMP_DIR/failing-bin/tmux" <<'SH'
 #!/usr/bin/env bash
-if [[ "$1" == "display-message" && -n "${TMUXIFY_FAIL_MARKER:-}" && ! -e "$TMUXIFY_FAIL_MARKER" ]]; then
+if [[ "$1" == "set-window-option" && -n "${TMUXIFY_FAIL_MARKER:-}" && ! -e "$TMUXIFY_FAIL_MARKER" ]]; then
   : > "$TMUXIFY_FAIL_MARKER"
   exit 1
 fi
@@ -468,13 +477,16 @@ SH
 chmod +x "$TMP_DIR/failing-bin/tmux"
 output=$(run_expect_failure env -u TMUX TMUX_TMPDIR="$portable_sockdir" PATH="$TMP_DIR/failing-bin:$PATH" TMUXIFY_REAL_TMUX="$real_tmux" TMUXIFY_FAIL_MARKER="$TMP_DIR/failure-fired" "$TMUXIFY" --file "$TMP_DIR/portable.yml" --detach --no-commands)
 [[ -f "$TMP_DIR/failure-fired" ]] || fail "expected deterministic tmux failure to fire"
-if env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux has-session -t "${TEST_PREFIX}_portable" 2>/dev/null; then
+if env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux has-session -t "$portable_session" 2>/dev/null; then
   fail "expected failed construction to remove partial session"
 fi
 env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux has-session -t "${TEST_PREFIX}_server_keepalive" 2>/dev/null || fail "cleanup removed an unrelated existing session"
-env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux new-session -d -s "${TEST_PREFIX}_portable" -n Existing
 run_expect_success env -u TMUX TMUX_TMPDIR="$portable_sockdir" "$TMUXIFY" --file "$TMP_DIR/portable.yml" --detach --no-commands >/dev/null
-existing_windows=$(env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux list-windows -t "${TEST_PREFIX}_portable" -F '#{window_name}')
+last_window=$(env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux list-windows -t "$portable_session" -F '#{window_id}' | tail -n 1)
+env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux kill-window -t "$last_window"
+env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux rename-window -t "$portable_session:" Existing
+run_expect_success env -u TMUX TMUX_TMPDIR="$portable_sockdir" "$TMUXIFY" --file "$TMP_DIR/portable.yml" --detach --no-commands >/dev/null
+existing_windows=$(env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux list-windows -t "$portable_session" -F '#{window_name}')
 [[ "$existing_windows" == "Existing" ]] || fail "expected matching existing session to remain unmodified"
 env -u TMUX TMUX_TMPDIR="$portable_sockdir" tmux kill-server >/dev/null 2>&1 || true
 rm -rf "$portable_sockdir"
@@ -504,6 +516,7 @@ exported_pane_counts=$(yq -r '.windows[].layout.splits | length' "$export_file" 
 recreated_name="${TEST_PREFIX}_export_recreated"
 SESSION_NAME="$recreated_name" yq -i '.session.name = strenv(SESSION_NAME)' "$export_file"
 run_expect_success "$TMUXIFY" --file "$export_file" --detach --no-commands >/dev/null
+recreated_name=$(workspace_session "$recreated_name")
 recreated_names=$(tmux list-windows -t "=$recreated_name" -F '#{window_name}' | paste -sd, -)
 [[ "$recreated_names" == 'Dev: #1,Ops "quoted"' ]] || fail "expected recreated window names, got $recreated_names"
 recreated_counts=$(tmux list-windows -t "=$recreated_name" -F '#{window_id}' | while read -r window; do tmux list-panes -t "$window" -F '#{pane_id}' | wc -l | tr -d ' '; done | paste -sd, -)

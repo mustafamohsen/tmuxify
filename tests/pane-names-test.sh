@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 TMUXIFY="$ROOT_DIR/tmuxify"
+# shellcheck source=tests/workspace-helpers.sh
+source "$ROOT_DIR/tests/workspace-helpers.sh"
 TEST_DIR=$(mktemp -d /tmp/tmuxify-pane-names.XXXXXX)
 export HOME="$TEST_DIR/home" XDG_CONFIG_HOME="$TEST_DIR/config" TMPDIR="$TEST_DIR/tmp" TMUX_TMPDIR="$TEST_DIR"
 unset TMUX TMUX_PANE
@@ -55,12 +57,13 @@ tmux set-option -g default-size 161x81
 tmux set-option -g pane-border-status bottom
 tmux set-option -g pane-border-format 'custom #{pane_title}'
 run --detach --no-commands --file "$TEST_DIR/layout.yml" > "$TEST_DIR/output"
-editor=$(tmux list-panes -t '=labels' -F '#{pane_id}' | head -n 1)
-shell=$(tmux list-panes -t '=labels' -F '#{pane_id}' | tail -n 1)
+labels_session=$(workspace_session labels)
+editor=$(tmux list-panes -t "=$labels_session" -F '#{pane_id}' | head -n 1)
+shell=$(tmux list-panes -t "=$labels_session" -F '#{pane_id}' | tail -n 1)
 [[ $(tmux display-message -p -t "$editor" '#{@tmuxify_pane_name}') == Editor ]] || fail 'missing configured name'
-[[ $(tmux show-options -wv -t '=labels:' pane-border-status) == top ]] || fail 'requested border was not enabled'
+[[ $(tmux show-options -wv -t "=$labels_session:" pane-border-status) == top ]] || fail 'requested border was not enabled'
 tmux select-pane -t "$editor" -T 'application title'
-format=$(tmux show-options -wv -t '=labels:' pane-border-format)
+format=$(tmux show-options -wv -t "=$labels_session:" pane-border-format)
 [[ $(tmux display-message -p -t "$editor" "$format") == Editor ]] || fail 'application title overwrote label'
 tmux select-pane -t "$shell" -T 'unnamed shell'
 [[ $(tmux display-message -p -t "$shell" "$format") == 'unnamed shell' ]] || fail 'unnamed pane lost title fallback'
@@ -72,7 +75,7 @@ echo 'ok - names survive title updates and borders are scoped to the new window'
 # A numeric-looking name is still a literal label, not a format boolean.
 yq -i '.session.name = "zero-label" | .layout.splits[0].name = "0"' "$TEST_DIR/layout.yml"
 run --detach --no-commands --file "$TEST_DIR/layout.yml" > "$TEST_DIR/output"
-zero=$(tmux list-panes -t '=zero-label' -F '#{pane_id}' | head -n 1)
+zero=$(tmux list-panes -t "=$(workspace_session zero-label)" -F '#{pane_id}' | head -n 1)
 [[ $(tmux display-message -p -t "$zero" "$format") == 0 ]] || fail 'zero name was treated as false'
 echo 'ok - numeric-looking names remain literal labels'
 
@@ -97,12 +100,13 @@ echo 'ok - invalid names, container names, and border settings fail validation'
 for name in ';' 'trailing;' 'backslash\;' '-leading' 'quote " and apostrophe '\''' '日本語 café' 'Literal #[fg=red] #{pane_id} #(touch NEVER_EXECUTE)'; do
   NAME="$name" yq -i '.session.name = "literal" | .session.pane_names.border = "top" | .layout.splits[0].name = strenv(NAME)' "$TEST_DIR/layout.yml"
   run --detach --no-commands --file "$TEST_DIR/layout.yml" > "$TEST_DIR/output"
-  pane=$(tmux list-panes -t '=literal' -F '#{pane_id}' | head -n 1)
+  literal_session=$(workspace_session literal)
+  pane=$(tmux list-panes -t "=$literal_session" -F '#{pane_id}' | head -n 1)
   [[ $(tmux display-message -p -t "$pane" '#{@tmuxify_pane_name}') == "$name" ]] || fail "name did not survive literally: $name"
   if [[ $name == Literal* ]]; then
     [[ $(tmux display-message -p -t "$pane" "$format") == 'Literal ##[fg=red] ##{pane_id} ##(touch NEVER_EXECUTE)' ]] || fail 'unsafe style/format expansion'
   fi
-  tmux kill-session -t '=literal'
+  tmux kill-session -t "=$literal_session"
 done
 [[ ! -e NEVER_EXECUTE ]] || fail 'executed a name as a command'
 echo 'ok - punctuation, Unicode, and tmux syntax remain literal name data'
@@ -113,17 +117,19 @@ cp "$TEST_DIR/layout.yml" "$TEST_DIR/render.yml"
 render_name='Literal café #[fg=red] #{pane_id} #(touch NEVER_EXECUTE) ;'
 NAME="$render_name" yq -i '.session.name = "render" | .layout.splits = [{"id": "label", "name": strenv(NAME)}]' "$TEST_DIR/render.yml"
 run --detach --no-commands --file "$TEST_DIR/render.yml" > "$TEST_DIR/output"
-python3 "$ROOT_DIR/tests/pane-names-render.py" render "$render_name"
+render_session=$(workspace_session render)
+python3 "$ROOT_DIR/tests/pane-names-render.py" "$render_session" "$render_name"
 [[ ! -e NEVER_EXECUTE ]] || fail 'border rendering executed a name as a command'
-tmux kill-session -t '=render'
+tmux kill-session -t "=$render_session"
 echo 'ok - attached borders render Unicode, hashes, styles, and semicolons literally'
 
 # Default preserve mode records names without taking ownership of border UI.
 yq -i '.session.name = "preserve" | del(.session.pane_names.border)' "$TEST_DIR/layout.yml"
 run --detach --no-commands --file "$TEST_DIR/layout.yml" > "$TEST_DIR/output"
-[[ $(tmux show-options -Awv -t '=preserve:' pane-border-status) == bottom ]] || fail 'default changed inherited border position'
-[[ $(tmux show-options -Awv -t '=preserve:' pane-border-format) == 'custom #{pane_title}' ]] || fail 'default changed inherited format'
-pane=$(tmux list-panes -t '=preserve' -F '#{pane_id}' | head -n 1)
+preserve_session=$(workspace_session preserve)
+[[ $(tmux show-options -Awv -t "$preserve_session:" pane-border-status) == bottom ]] || fail 'default changed inherited border position'
+[[ $(tmux show-options -Awv -t "$preserve_session:" pane-border-format) == 'custom #{pane_title}' ]] || fail 'default changed inherited format'
+pane=$(tmux list-panes -t "=$preserve_session" -F '#{pane_id}' | head -n 1)
 [[ $(tmux display-message -p -t "$pane" '#{@tmuxify_pane_name}') == 'Literal #[fg=red] #{pane_id} #(touch NEVER_EXECUTE)' ]] || fail 'preserve mode lost metadata'
 
 # Reuse is attach-only, even if the opted-in configuration is different.
@@ -132,17 +138,18 @@ yq -i '.session.pane_names.border = "top" | .layout.splits[0].name = "Changed"' 
 run --detach --file "$TEST_DIR/layout.yml" > "$TEST_DIR/output"
 [[ $(tmux display-message -p -t "$pane" '#{pane_title}') == 'keep this title' ]] || fail 'reuse changed title'
 [[ $(tmux display-message -p -t "$pane" '#{@tmuxify_pane_name}') != Changed ]] || fail 'reuse changed metadata'
-[[ $(tmux show-options -Awv -t '=preserve:' pane-border-format) == 'custom #{pane_title}' ]] || fail 'reuse changed border'
+[[ $(tmux show-options -Awv -t "$preserve_session:" pane-border-format) == 'custom #{pane_title}' ]] || fail 'reuse changed border'
 echo 'ok - preserve mode and existing-session reuse leave border configuration alone'
 
 # Opt-in is strictly a YAML boolean; old unknown metadata must remain inert.
 for enabled in 'false' '"true"' 'null' '[]'; do
   VALUE="$enabled" yq -i '.session.name = "disabled" | .session.pane_names.enabled = (strenv(VALUE) | from_json) | .session.pane_names.border = "invalid" | .layout.splits[0].name = ["ignored"]' "$TEST_DIR/layout.yml"
   run --detach --no-commands --file "$TEST_DIR/layout.yml" > "$TEST_DIR/output"
-  [[ -z $(tmux list-panes -t '=disabled' -F '#{@tmuxify_pane_name}' | tr -d '\n') ]] || fail 'disabled feature added names'
-  [[ $(tmux show-options -Awv -t '=disabled:' pane-border-format) == 'custom #{pane_title}' ]] || fail 'disabled feature changed borders'
-  [[ $(tmux list-panes -t '=disabled' -F '#{pane_width} #{pane_height} #{pane_active}') == $'80 80 1\n80 80 0' ]] || fail 'disabled feature changed geometry/focus'
-  tmux kill-session -t '=disabled'
+  disabled_session=$(workspace_session disabled)
+  [[ -z $(tmux list-panes -t "=$disabled_session" -F '#{@tmuxify_pane_name}' | tr -d '\n') ]] || fail 'disabled feature added names'
+  [[ $(tmux show-options -Awv -t "$disabled_session:" pane-border-format) == 'custom #{pane_title}' ]] || fail 'disabled feature changed borders'
+  [[ $(tmux list-panes -t "=$disabled_session" -F '#{pane_width} #{pane_height} #{pane_active}') == $'80 80 1\n80 80 0' ]] || fail 'disabled feature changed geometry/focus'
+  tmux kill-session -t "=$disabled_session"
 done
 echo 'ok - disabled naming leaves runtime geometry, focus, and options unchanged'
 
@@ -189,11 +196,12 @@ tmux set-option -g pane-base-index 3
 tmux set-option -g renumber-windows on
 run --detach --no-commands --file "$TEST_DIR/multi.yml" > "$TEST_DIR/output"
 [[ ! -e "$HOME/command-names" ]] || fail '--no-commands dispatched a command'
-[[ $(tmux display-message -p -t '=multi:' '#{@tmuxify_pane_name}') == Bottom ]] || fail 'naming broke nested pane focus'
-[[ $(tmux list-panes -t '=multi:5' -F '#{@tmuxify_pane_name}') == $'Repeated label\nRepeated label\nBottom' ]] || fail 'nested/duplicate names did not reach their panes'
-[[ $(tmux show-options -Awv -t '=multi:6' pane-border-status) == bottom ]] || fail 'second named window lost border'
-[[ $(tmux show-options -Awv -t '=multi:7' pane-border-format) == 'custom #{pane_title}' ]] || fail 'unnamed window got managed border'
-geometry=$(tmux list-panes -t '=multi:5' -F '#{pane_width} #{pane_height}')
+multi_session=$(workspace_session multi)
+[[ $(tmux display-message -p -t "=$multi_session:" '#{@tmuxify_pane_name}') == Bottom ]] || fail 'naming broke nested pane focus'
+[[ $(tmux list-panes -t "=$multi_session:5" -F '#{@tmuxify_pane_name}') == $'Repeated label\nRepeated label\nBottom' ]] || fail 'nested/duplicate names did not reach their panes'
+[[ $(tmux show-options -Awv -t "=$multi_session:6" pane-border-status) == bottom ]] || fail 'second named window lost border'
+[[ $(tmux show-options -Awv -t "=$multi_session:7" pane-border-format) == 'custom #{pane_title}' ]] || fail 'unnamed window got managed border'
+geometry=$(tmux list-panes -t "=$multi_session:5" -F '#{pane_width} #{pane_height}')
 printf '%s\n' "$geometry" | awk '
   $1 != 80 { exit 1 }
   NR == 1 && $2 != 80 { exit 1 }
@@ -208,7 +216,7 @@ grep -qx Logs "$HOME/command-names" || fail 'commands ran before all windows wer
 echo 'ok - nested multi-window names preserve sizes, focus, indexes, and command ordering'
 
 # Export stays a starter template; it must not harvest labels or shell titles.
-active=$(tmux display-message -p -t '=multi:' '#{pane_id}')
+active=$(tmux display-message -p -t "=$multi_session:" '#{pane_id}')
 export_tmux=$(tmux display-message -p -t "$active" '#{socket_path},#{pid},0')
 TMUX="$export_tmux" TMUX_PANE="$active" run --export "$TEST_DIR/export.yml" > "$TEST_DIR/output"
 [[ $(yq '.session | has("pane_names")' "$TEST_DIR/export.yml") == false ]] || fail 'export unexpectedly enabled pane names'
@@ -257,17 +265,18 @@ done
 export TMUXIFY_TEST_VERSION=2.1
 yq -i '.session.pane_names.enabled = false' "$TEST_DIR/multi.yml"
 run --detach --no-commands --file "$TEST_DIR/multi.yml" > "$TEST_DIR/output"
-tmux has-session -t '=old-version' || fail 'old-version non-opted-in layout was blocked'
+tmux has-session -t "=$(workspace_session old-version)" || fail 'old-version non-opted-in layout was blocked'
 unset TMUXIFY_TEST_VERSION
 echo 'ok - only new opted-in workspaces require tmux 3.2'
 
 yq -i '.session.name = "failure" | .session.pane_names.enabled = true' "$TEST_DIR/multi.yml"
+failure_session=$(proposed_session "$TEST_DIR/multi.yml")
 rm -f "$HOME/command-names"
 for failure in border metadata signal; do
   export TMUXIFY_TEST_FAILURE="$failure"
   expect_failure --detach --file "$TEST_DIR/multi.yml"
   unset TMUXIFY_TEST_FAILURE
-  if tmux has-session -t '=failure' 2>/dev/null; then fail "$failure left a partial session"; fi
+  if tmux has-session -t "=$failure_session" 2>/dev/null; then fail "$failure left a partial session"; fi
   [[ ! -e "$HOME/command-names" ]] || fail "$failure dispatched commands"
   [[ -z $(find "$TMPDIR" -mindepth 1 -print) ]] || fail "$failure leaked temporary state"
   tmux has-session -t '=keepalive' || fail "$failure removed an unrelated session"
@@ -276,6 +285,6 @@ echo 'ok - naming errors and interruption roll back only the new workspace befor
 
 tmux set-option -g default-size 10x3
 expect_failure --detach --no-commands --file "$TEST_DIR/multi.yml"
-if tmux has-session -t '=failure' 2>/dev/null; then fail 'small named layout left a partial session'; fi
+if tmux has-session -t "=$failure_session" 2>/dev/null; then fail 'small named layout left a partial session'; fi
 tmux has-session -t '=keepalive' || fail 'small named layout removed an unrelated session'
 echo 'ok - named layouts that cannot fit fail cleanly'

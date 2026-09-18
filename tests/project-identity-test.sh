@@ -125,3 +125,171 @@ echo 'ok - preview and layout listing require neither a tmux connection nor Git 
 run --detach --no-commands > "$TEST_DIR/output"
 [[ $("$REAL_TMUX" list-panes -a -F '#{session_name} #{pane_current_path}' | grep -v '^identity-keepalive ' | cut -d ' ' -f 2-) == "$project_root" ]] || fail 'pane started outside the discovered root'
 echo 'ok - detached creation starts panes in the discovered project root'
+
+mkdir -p "$TEST_DIR/a/api" "$TEST_DIR/b/api"
+run --root "$TEST_DIR/a/api" --file "$TEST_DIR/repo/.tmuxify.yml" --detach --no-commands > "$TEST_DIR/output"
+run --root "$TEST_DIR/b/api" --file "$TEST_DIR/repo/.tmuxify.yml" --detach --no-commands > "$TEST_DIR/output"
+paths=$("$REAL_TMUX" list-panes -a -F '#{pane_current_path}')
+contains "$paths" "${project_root%/*}/a/api"
+contains "$paths" "${project_root%/*}/b/api"
+managed_id() {
+  local session metadata
+  for session in $("$REAL_TMUX" list-sessions -F '#{session_id}'); do
+    metadata=$("$REAL_TMUX" show-options -qv -t "$session" @tmuxify_workspace_identity)
+    if [[ -n $metadata ]] && [[ $(printf '%s' "$metadata" | yq -r '.[1]') == "$1" ]] && [[ $(printf '%s' "$metadata" | yq -r '.[2]') == "$2" ]] && [[ $(printf '%s' "$metadata" | yq -r '.[3]') == "$3" ]]; then
+      printf '%s\n' "$session"
+    fi
+  done
+}
+first=$(managed_id "${project_root%/*}/a/api" default '')
+second=$(managed_id "${project_root%/*}/b/api" default '')
+[[ -n $first && -n $second && $first != "$second" ]] || fail 'same-basename projects did not get distinct full identities'
+run --root "$TEST_DIR/a/api" --file "$TEST_DIR/repo/.tmuxify.yml" --detach --no-commands > "$TEST_DIR/output"
+[[ $(managed_id "${project_root%/*}/a/api" default '') == "$first" ]] || fail 'repeat invocation did not reuse the same identity'
+"$REAL_TMUX" rename-session -t "$first" renamed-by-user
+run --root "$TEST_DIR/a/api" --file "$TEST_DIR/repo/.tmuxify.yml" --detach --no-commands > "$TEST_DIR/output"
+contains "$(<"$TEST_DIR/output")" renamed-by-user
+[[ $(managed_id "${project_root%/*}/a/api" default '') == "$first" ]] || fail 'tmux rename lost workspace identity'
+echo 'ok - full identity separates same-basename projects and survives repeat launch and rename'
+
+cp "$TEST_DIR/repo/.tmuxify.yml" "$TEST_DIR/named.yml"
+yq -i '.session.name = "tests"' "$TEST_DIR/named.yml"
+run --root "$TEST_DIR/a/api" --file "$TEST_DIR/named.yml" --detach --no-commands > "$TEST_DIR/output"
+named=$(managed_id "${project_root%/*}/a/api" named tests)
+[[ -n $named && $named != "$first" ]] || fail 'named workspace replaced default workspace'
+yq -i '.session.name = "default"' "$TEST_DIR/named.yml"
+run --root "$TEST_DIR/a/api" --file "$TEST_DIR/named.yml" --detach --no-commands > "$TEST_DIR/output"
+[[ $(managed_id "${project_root%/*}/a/api" named default) != "$first" ]] || fail 'named default aliased unnamed default'
+for value in 'false' '42' '[]' '{}' '"line\n"' '"nul\u0000name"'; do
+  VALUE="$value" yq -i '.session.name = (strenv(VALUE) | from_json)' "$TEST_DIR/named.yml"
+  expect_failure --root "$TEST_DIR/a/api" --file "$TEST_DIR/named.yml" --dry-run
+done
+for value in 'null' '""'; do
+  VALUE="$value" yq -i '.session.name = (strenv(VALUE) | from_json)' "$TEST_DIR/named.yml"
+  run --root "$TEST_DIR/a/api" --file "$TEST_DIR/named.yml" --detach --no-commands > "$TEST_DIR/output"
+  contains "$(<"$TEST_DIR/output")" renamed-by-user
+done
+echo 'ok - workspace selectors distinguish named/default identities and reject invalid names'
+
+export_managed() {
+  local pane socket
+  pane=$("$REAL_TMUX" display-message -p -t "$1" '#{pane_id}')
+  # socket_path is not a tmux 2.1 format. Use this fixture's known private socket.
+  socket="$TEST_DIR/tmux-$(id -u)/default,$("$REAL_TMUX" display-message -p -t "$1" '#{pid}'),${1#\$}"
+  TMUX="$socket" TMUX_PANE="$pane" run --export "$2" > "$TEST_DIR/output"
+}
+export_managed "$first" "$TEST_DIR/export-default.yml"
+[[ $(yq -r '.session.name' "$TEST_DIR/export-default.yml") == null ]] || fail 'default export captured concrete session name'
+export_managed "$named" "$TEST_DIR/export-named.yml"
+[[ $(yq -r '.session.name' "$TEST_DIR/export-named.yml") == tests ]] || fail 'named export lost original selector'
+if grep -Fq -- "${project_root%/*}/a/api" "$TEST_DIR/export-named.yml"; then fail 'export embedded project identity'; fi
+run --root "$TEST_DIR/a/api" --file "$TEST_DIR/export-named.yml" --detach --no-commands > "$TEST_DIR/output"
+[[ $(managed_id "${project_root%/*}/a/api" named tests) == "$named" ]] || fail 'export changed workspace identity'
+echo 'ok - export preserves portable selectors, including manually renamed sessions'
+
+# Identity, readiness, and duplicates are public ownership checks, not name guesses.
+identity=$("$REAL_TMUX" show-options -qv -t "$first" @tmuxify_workspace_identity)
+for state in building invalid ''; do
+  "$REAL_TMUX" set-option -t "$first" @tmuxify_workspace_state "$state"
+  expect_failure --root "$TEST_DIR/a/api" --file "$TEST_DIR/repo/.tmuxify.yml" --detach
+  contains "$(<"$TEST_DIR/output")" readiness
+done
+"$REAL_TMUX" set-option -t "$first" @tmuxify_workspace_state ready
+copy=$("$REAL_TMUX" new-session -d -s copied-identity -P -F '#{session_id}')
+"$REAL_TMUX" set-option -t "$copy" @tmuxify_workspace_identity "$identity"
+"$REAL_TMUX" set-option -t "$copy" @tmuxify_workspace_state building
+expect_failure --root "$TEST_DIR/a/api" --file "$TEST_DIR/repo/.tmuxify.yml" --detach
+contains "$(<"$TEST_DIR/output")" 'Multiple sessions'
+"$REAL_TMUX" kill-session -t "$copy"
+# JSON formatting does not alter the underlying identity fields.
+pretty=$(printf '%s' "$identity" | yq -p=json -o=json -I=2 '.')
+"$REAL_TMUX" set-option -t "$first" @tmuxify_workspace_identity "$pretty"
+run --root "$TEST_DIR/a/api" --file "$TEST_DIR/repo/.tmuxify.yml" --detach > "$TEST_DIR/output"
+contains "$(<"$TEST_DIR/output")" renamed-by-user
+"$REAL_TMUX" set-option -t "$first" @tmuxify_workspace_identity "$identity"
+echo 'ok - reuse requires one full identity and committed readiness'
+
+mkdir -p "$TEST_DIR/c/api"
+proposed=$(run --root "$TEST_DIR/c/api" --file "$TEST_DIR/repo/.tmuxify.yml" --dry-run | awk '/^Proposed tmux session: / { print $4 }')
+occupied=$("$REAL_TMUX" new-session -d -s "$proposed" -P -F '#{session_id}')
+for metadata in '' 'broken' '["future", "/root", "default", ""]' "$identity"; do
+  "$REAL_TMUX" set-option -t "$occupied" @tmuxify_workspace_identity "$metadata"
+  expect_failure --root "$TEST_DIR/c/api" --file "$TEST_DIR/repo/.tmuxify.yml" --detach
+  contains "$(<"$TEST_DIR/output")" 'occupied without a matching identity'
+  "$REAL_TMUX" has-session -t "$occupied" || fail 'collision removed an unrelated session'
+done
+"$REAL_TMUX" kill-session -t "$occupied"
+legacy=$("$REAL_TMUX" new-session -d -s api -n Legacy -P -F '#{session_id}')
+"$REAL_TMUX" set-option -g @tmuxify_workspace_identity "$identity"
+"$REAL_TMUX" set-option -g @tmuxify_workspace_state ready
+run --root "$TEST_DIR/c/api" --file "$TEST_DIR/repo/.tmuxify.yml" --detach --no-commands > "$TEST_DIR/output"
+contains "$(<"$TEST_DIR/output")" "Unmanaged session 'api' was left untouched"
+[[ $("$REAL_TMUX" display-message -p -t "$legacy" '#{window_name}') == Legacy ]] || fail 'legacy session was changed'
+[[ -n $(managed_id "${project_root%/*}/c/api" default '') ]] || fail 'global metadata was accepted as ownership'
+"$REAL_TMUX" set-option -gu @tmuxify_workspace_identity
+"$REAL_TMUX" set-option -gu @tmuxify_workspace_state
+echo 'ok - name collisions fail closed and unmanaged legacy sessions stay untouched'
+
+# Freeze the externally visible naming contract against the plan's worked vectors.
+cat > "$TEST_DIR/bin/pwd" <<'SH'
+#!/bin/sh
+printf '%s\n' /projects/acme/api
+SH
+chmod +x "$TEST_DIR/bin/pwd"
+cp "$TEST_DIR/repo/.tmuxify.yml" "$TEST_DIR/golden.yml"
+for selector in unnamed tests default; do
+  case "$selector" in
+    unnamed) expected=api--default--15b03f1e; yq -i 'del(.session.name)' "$TEST_DIR/golden.yml" ;;
+    tests) expected=api--tests--97124f8c; yq -i '.session.name = "tests"' "$TEST_DIR/golden.yml" ;;
+    default) expected=api--default--ade4c2e1; yq -i '.session.name = "default"' "$TEST_DIR/golden.yml" ;;
+  esac
+  output=$(PATH="$TEST_DIR/bin:$PATH" run --root "$TEST_DIR/a/api" --file "$TEST_DIR/golden.yml" --dry-run)
+  contains "$output" "Proposed tmux session: $expected"
+done
+rm "$TEST_DIR/bin/pwd"
+if mkdir "$TEST_DIR/invalid"$'\xff' 2>/dev/null; then
+  expect_failure --root "$TEST_DIR/invalid"$'\xff' --dry-run
+  contains "$(<"$TEST_DIR/output")" 'UTF-8'
+else
+  echo '# filesystem itself rejects invalid UTF-8 paths'
+fi
+echo 'ok - fixed identity vectors are portable and invalid path bytes cannot alias'
+
+# tmux display-message can return success with empty output for a vanished target.
+export TMUXIFY_REAL_TMUX="$REAL_TMUX"
+cat > "$TEST_DIR/bin/tmux" <<'SH'
+#!/usr/bin/env bash
+if [[ $1 == display-message && $* == *"${TMUXIFY_EMPTY_SESSION:?}"* && $* == *'#{session_name}'* ]]; then
+  exit 0
+fi
+exec "$TMUXIFY_REAL_TMUX" "$@"
+SH
+chmod +x "$TEST_DIR/bin/tmux"
+TMUXIFY_EMPTY_SESSION="$first" PATH="$TEST_DIR/bin:$PATH" expect_failure --root "$TEST_DIR/a/api" --file "$TEST_DIR/repo/.tmuxify.yml" --detach
+contains "$(<"$TEST_DIR/output")" 'disappeared'
+rm "$TEST_DIR/bin/tmux"
+echo 'ok - vanished targets cannot produce detached success'
+
+mkdir "$TEST_DIR/space project"
+cat > "$TEST_DIR/cwd.yml" <<'YAML'
+session: {name: 'cwd: #literal;'}
+windows:
+  - id: first
+    name: First
+    layout: {type: horizontal, splits: [{id: left}, {id: right}]}
+  - id: second
+    name: Second
+    layout: {type: vertical, splits: [{id: bottom}]}
+YAML
+run --root "$TEST_DIR/space project" --file "$TEST_DIR/cwd.yml" --detach --no-commands > "$TEST_DIR/output"
+cwd_session=$(managed_id "${project_root%/*}/space project" named 'cwd: #literal;')
+[[ -n $cwd_session ]] || fail 'literal workspace name did not survive metadata encoding'
+paths=$("$REAL_TMUX" list-panes -s -t "$cwd_session" -F '#{pane_current_path}')
+[[ $(printf '%s\n' "$paths" | wc -l | tr -d ' ') == 3 ]] || fail 'expected three panes across two windows'
+[[ $(printf '%s\n' "$paths" | sort -u) == "${project_root%/*}/space project" ]] || fail 'multi-window root was not applied to every pane'
+echo 'ok - all windows use the explicit root and workspace names stay literal data'
+
+"$REAL_TMUX" kill-server
+run --root "$TEST_DIR/a/api" --file "$TEST_DIR/repo/.tmuxify.yml" --detach --no-commands > "$TEST_DIR/output"
+[[ -n $(managed_id "${project_root%/*}/a/api" default '') ]] || fail 'no-server state was not handled as new creation'
+echo 'ok - first launch creates a workspace when no tmux server exists'
