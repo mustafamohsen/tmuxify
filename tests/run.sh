@@ -4,12 +4,13 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 TMUXIFY="$ROOT_DIR/tmuxify"
 TEST_PREFIX="tmuxify_ci_$$"
-TMP_DIR=$(mktemp -d)
+TMP_DIR=$(mktemp -d /tmp/tmuxify-suite.XXXXXX)
+export HOME="$TMP_DIR/home" XDG_CONFIG_HOME="$TMP_DIR/config" TMUX_TMPDIR="$TMP_DIR"
+unset TMUX TMUX_PANE
+mkdir -p "$HOME" "$XDG_CONFIG_HOME"
 
 cleanup() {
-  tmux list-sessions -F '#{session_name}' 2>/dev/null | grep "^${TEST_PREFIX}" | while read -r session; do
-    tmux kill-session -t "$session" 2>/dev/null || true
-  done
+  tmux kill-server >/dev/null 2>&1 || true
   if [ -d "/tmp/${TEST_PREFIX}_base_index_sock" ]; then
     env -u TMUX TMUX_TMPDIR="/tmp/${TEST_PREFIX}_base_index_sock" tmux kill-server >/dev/null 2>&1 || true
   fi
@@ -19,6 +20,10 @@ cleanup() {
   rm -rf "$TMP_DIR" "/tmp/${TEST_PREFIX}_base_index_sock" "/tmp/${TEST_PREFIX}_portable_sock"
 }
 trap cleanup EXIT
+
+tmux -f /dev/null new-session -d -s suite-keepalive -x 161 -y 81 'sleep 1800'
+tmux set-option -g default-shell /bin/bash
+tmux set-option -g default-command 'exec env HISTFILE=/dev/null /bin/bash --noprofile --norc'
 
 fail() {
   echo "not ok - $*" >&2
