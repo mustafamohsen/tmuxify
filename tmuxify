@@ -447,18 +447,15 @@ validate_size() {
 # Only an explicit YAML boolean true activates the new schema. Everything else
 # retains the historical treatment of these keys as ignored metadata.
 configure_pane_names() {
-  local enabled border_type
+  local enabled valid_border
   enabled=$(yq -r '.session | select(tag == "!!map") | .pane_names | select(tag == "!!map") | .enabled | select(tag == "!!bool")' "$CONFIG_FILE")
   [ "$enabled" = "true" ] || return 0
   PANE_NAMES_ENABLED=1
   if [ "$(yq -r '.session.pane_names | has("border")' "$CONFIG_FILE")" = "true" ]; then
-    border_type=$(yq -r '.session.pane_names.border | type' "$CONFIG_FILE")
+    # Compare the original scalar before command substitution strips newlines.
+    valid_border=$(yq -r '.session.pane_names.border | ((tag == "!!str") and (. == "preserve" or . == "top" or . == "bottom"))' "$CONFIG_FILE")
+    [ "$valid_border" = "true" ] || die "session.pane_names.border must be preserve, top, or bottom."
     PANE_NAMES_BORDER=$(yq -r '.session.pane_names.border' "$CONFIG_FILE")
-    [ "$border_type" = "!!str" ] || die "session.pane_names.border must be preserve, top, or bottom."
-    case "$PANE_NAMES_BORDER" in
-      preserve|top|bottom) ;;
-      *) die "session.pane_names.border must be preserve, top, or bottom." ;;
-    esac
   fi
 }
 

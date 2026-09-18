@@ -86,7 +86,7 @@ yq -i '.layout.splits[0].name = "Editor" | .layout.name = "Container"' "$TEST_DI
 expect_failure --dry-run --file "$TEST_DIR/layout.yml"
 grep -q 'only allowed on leaf panes' "$TEST_DIR/output" || fail 'root container name was accepted'
 yq -i 'del(.layout.name)' "$TEST_DIR/layout.yml"
-for value in '"left"' 'null' 'true' '[]'; do
+for value in '"left"' 'null' 'true' '[]' '"top\n"' '"bottom\n"' '"preserve\n"'; do
   VALUE="$value" yq -i '.session.pane_names.border = (strenv(VALUE) | from_json)' "$TEST_DIR/layout.yml"
   expect_failure --dry-run --file "$TEST_DIR/layout.yml"
   grep -q 'border must be preserve, top, or bottom' "$TEST_DIR/output" || fail 'wrong border error'
