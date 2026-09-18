@@ -529,5 +529,17 @@ The owner authorized implementation after approving this plan. Remote publicatio
 - Public tests live in `tests/project-identity-test.sh`, `tests/identity-lifecycle-test.sh`, and `tests/identity-attach-test.sh`; existing layout/focus/geometry tests were adapted to inspect scoped runtime state.
 - Focused tests run locally on actual Bash 3.2, tmux 3.5a, and a locally built tmux 2.1. Baseline testing caught and corrected export's dependence on untargeted current-session lookup; it now identifies the calling session explicitly while preserving session-active focus.
 - PTY tests verify real CLI attachment and client switching, with bounded drain/detach cleanup.
-- CI covers the full Linux suite, the three identity suites against checksum-pinned tmux 2.1, and the identity suites on macOS Bash 3.2.
-- Full-suite and independent review results will be appended after the implementation gate; focused successes alone are not the final acceptance claim.
+- CI is configured for the full Linux suite, the three identity suites against checksum-pinned tmux 2.1, and the identity suites on macOS Bash 3.2.
+- Final runtime validation at `ef88c82`: all **28 integration groups passed** on macOS with Bash 3.2.57 and tmux 3.5a. This includes all bundled examples, real Bash/Zsh completion, attached-client switching, lifecycle failures/concurrency, and existing pane-name/layout regressions. Syntax checks and ShellCheck passed.
+- The three identity suites also passed at `ef88c82` with actual Bash 3.2.57 and locally compiled **tmux 2.1**. The host filesystem rejects invalid UTF-8 directory names itself, so that runtime rejection case was explicitly skipped on macOS.
+- Local Linux validation was interrupted during container dependency setup, before tests began. No Linux pass or remote CI result is claimed; that platform's configured CI gate remains outstanding.
+
+### Independent review
+
+The user-approved baseline was `a165c8f`; independent, fresh-context Standards and Spec reviewers examined the diff through `0b27e7d` in parallel.
+
+- **Standards:** no hard documented-standard breaches. One non-blocking **possible Duplicated Code** note identified repeated metadata lookup in `tests/workspace-helpers.sh` and `tests/project-identity-test.sh`. Deferred: these helpers currently make different cardinality assertions, and sharing their inventory operation is a future test-maintenance cleanup, not a runtime correctness fix.
+- **Spec:** three findings were reproduced through the public CLI and corrected test-first: discovered roots ending in semicolons (`5f765c7`), readiness values with trailing newlines (`fc7be8b`), and export with explicitly empty identity metadata (`ef88c82`). Each regression failed before its fix and passed afterward, including on tmux 2.1.
+- The retained Spec reviewer checked the corrective diff through `ef88c82`, confirmed all three findings resolved, and found no new defect within that change scope. The final full-suite and baseline runs above completed after the fixes.
+
+Review workflow: `a7b4c693-1b1f-4d76-a3df-ac11d0e552be`; Spec follow-up: `552ae501-5610-4746-a04c-9ed965b6121a`. Runtime remains 2.7.1; no remote publication or release was performed.
