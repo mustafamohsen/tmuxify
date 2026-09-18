@@ -63,7 +63,10 @@ output=$(run_expect_success "$TMUXIFY" --help)
 assert_contains "$output" "--dry-run"
 assert_contains "$output" "--no-commands"
 assert_contains "$output" "--list-layouts"
-echo "ok 1 - help documents safe workflow flags"
+assert_contains "$output" "session.pane_names.enabled: true"
+assert_contains "$output" "tmux 3.2+"
+assert_contains "$output" "preserve (default)"
+echo "ok 1 - help documents safe workflow flags and opt-in pane names"
 
 completion_options=$(run_expect_success "$TMUXIFY" --completion-options)
 while IFS= read -r flag; do

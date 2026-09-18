@@ -58,6 +58,12 @@ Options:
 Completion metadata:
       --completion-options   Print machine-readable option metadata
 
+Optional pane names (YAML configuration, not CLI flags):
+  Set session.pane_names.enabled: true and add name to leaf panes (tmux 3.2+).
+  session.pane_names.border: preserve (default), top, or bottom.
+  preserve keeps your border settings; top/bottom display stable pane labels.
+  Without the opt-in, existing layouts retain their behavior and tmux 2.1 baseline.
+
 Security note:
   Layout commands are shell commands. Review layouts from untrusted projects first,
   or use --dry-run / --no-commands.

@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Added
-- Added explicit `session.pane_names.enabled: true` opt-in and optional leaf-pane `name` labels, separate from focus IDs and stable across application title updates (#21).
+- Added explicit `session.pane_names.enabled: true` opt-in and optional leaf-pane `name` labels, separate from focus IDs and stable across application title updates ([#21](https://github.com/mustafamohsen/tmuxify/issues/21)). Thanks to Marco ([@fscaptain](https://github.com/fscaptain)) for the feature request.
 - Added `preserve` (default), `top`, and `bottom` border modes, scoped to newly created windows with named panes. Managed borders consume terminal space; existing sessions and global settings are not modified.
 - Added name validation, dry-run previews, a safe example, and focused CLI/tmux regressions for compatibility, literal rendering, nested layouts, focus, command controls, version gating, export, and rollback.
 
