@@ -856,7 +856,7 @@ export_session() {
   EXPORT_TEMP_FILE="$temp_export"
   info "Exporting current session '$current_session' layout to $EXPORT_FILENAME..."
 
-  active_pane=$(tmux display-message -p "${export_target[@]}" '#{pane_id}') || die "Failed to read active pane."
+  active_pane=$(tmux display-message -p -t "$current_id" '#{pane_id}') || die "Failed to read active pane."
   init_tmp_dir
   tmux list-windows -t "$current_id" -F '#{window_id}' > "$TMP_DIR/export_windows" || die "Failed to read window list."
   window_count=$(wc -l < "$TMP_DIR/export_windows" | tr -d ' ')

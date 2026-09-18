@@ -173,7 +173,7 @@ echo 'ok - workspace selectors distinguish named/default identities and reject i
 
 export_managed() {
   local pane socket
-  pane=$("$REAL_TMUX" display-message -p -t "$1" '#{pane_id}')
+  pane=$("$REAL_TMUX" display-message -p -t "${3:-$1}" '#{pane_id}')
   # socket_path is not a tmux 2.1 format. Use this fixture's known private socket.
   socket="$TEST_DIR/tmux-$(id -u)/default,$("$REAL_TMUX" display-message -p -t "$1" '#{pid}'),${1#\$}"
   TMUX="$socket" TMUX_PANE="$pane" run --export "$2" > "$TEST_DIR/output"
@@ -288,6 +288,10 @@ paths=$("$REAL_TMUX" list-panes -s -t "$cwd_session" -F '#{pane_current_path}')
 [[ $(printf '%s\n' "$paths" | wc -l | tr -d ' ') == 3 ]] || fail 'expected three panes across two windows'
 [[ $(printf '%s\n' "$paths" | sort -u) == "${project_root%/*}/space project" ]] || fail 'multi-window root was not applied to every pane'
 echo 'ok - all windows use the explicit root and workspace names stay literal data'
+inactive=$("$REAL_TMUX" list-panes -s -t "$cwd_session" -F '#{pane_id}' | tail -n 1)
+export_managed "$cwd_session" "$TEST_DIR/export-inactive.yml" "$inactive"
+[[ $(yq -r '.session.initial_focus' "$TEST_DIR/export-inactive.yml") == window1_pane1 ]] || fail 'export captured caller pane instead of session active focus'
+echo 'ok - export locates the calling session but preserves its active focus'
 
 "$REAL_TMUX" kill-server
 run --root "$TEST_DIR/a/api" --file "$TEST_DIR/repo/.tmuxify.yml" --detach --no-commands > "$TEST_DIR/output"
