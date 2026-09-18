@@ -12,6 +12,11 @@ Tmuxify is a single Bash script plus examples, completions, tests, and documenta
 - `README.md` - project overview.
 - `CHANGELOG.md` and `VERSION` - release metadata.
 
+## Design references
+
+- [Domain glossary](../CONTEXT.md) - terminology for project-aware workspaces.
+- [Project identity implementation plan](plans/project-identity.md) - proposed root discovery, scoped naming, migration, and validation; not yet implemented.
+
 ## Local checks
 
 Run the syntax check first:
