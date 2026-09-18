@@ -39,6 +39,14 @@ for flag in --file -f --export -e; do
 done
 echo 'ok - long and short file options preserve filenames containing spaces'
 
+mkdir 'project with spaces'
+touch project-file
+COMP_WORDS=(tmuxify --detach --root project)
+COMP_CWORD=3
+_tmuxify
+[[ ${#COMPREPLY[@]} -eq 1 && ${COMPREPLY[0]} == 'project with spaces' ]] || fail '--root must complete only directories without splitting spaces'
+echo 'ok - root completion selects directories only'
+
 COMP_WORDS=(tmuxify --file missing)
 COMP_CWORD=2
 _tmuxify

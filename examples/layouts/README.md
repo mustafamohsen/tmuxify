@@ -14,6 +14,8 @@ If you want only the panes first, run:
 tmuxify --no-commands --file examples/layouts/basic-2-pane.yml
 ```
 
+Example `session.name` values select named workspaces within the resolved project; they are not literal tmux session names. `name: null` selects the default workspace. `--file` chooses a template without changing the project root; use `--root DIR` when needed. A later normal launch reuses a `--no-commands` workspace without starting its skipped commands.
+
 ## Trust and safety
 
 Tmuxify sends each pane's `command` to tmux as if you typed it. Treat layout files like shell scripts:
@@ -40,10 +42,10 @@ These are the best first layouts to copy into a project as `.tmuxify.yml`:
 
 | Layout | Audience | Assumptions |
 |---|---|---|
-| `dev-frontend/general-frontend.yml` | Generic frontend | Current directory is the frontend app. |
+| `dev-frontend/general-frontend.yml` | Generic frontend | Resolved project root is the frontend app. |
 | `dev-frontend/react-dev.yml` | React/Vite/CRA-style apps | Uses `npm run dev` or `npm start` fallback. |
 | `dev-frontend/vue-dev.yml` | Vue/Vite/Vue CLI apps | Uses `npm run dev` or `npm run serve` fallback. |
-| `dev-backend/go-backend.yml` | Go backend | Current directory is a Go module. |
+| `dev-backend/go-backend.yml` | Go backend | Resolved project root is a Go module. |
 | `dev-backend/node-backend.yml` | Node.js backend | Uses `npm run dev`, tests, and safe log tailing. |
 | `dev-backend/python-flask.yml` | Flask backend | Uses `python -m flask` and `python -m pytest`. |
 | `golang-dev.yml` | Go project workbench | Editor, terminal, tests, and run pane. |

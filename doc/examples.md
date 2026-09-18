@@ -8,8 +8,9 @@ Example layouts live in `examples/layouts/`. They are starters: copy one, previe
 cp examples/layouts/basic-3-pane.yml .tmuxify.yml
 tmuxify --dry-run
 tmuxify --no-commands
-tmuxify
 ```
+
+This creates a structure-only workspace. To launch configured commands on creation, run `tmuxify` **instead of** `--no-commands` after the preview. Reusing an existing workspace does not start skipped commands. Example `session.name` values are project-scoped, so the same template can be used in separate projects without sharing a session.
 
 After `tmuxify --update`, bundled examples are also refreshed under:
 

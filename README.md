@@ -11,7 +11,7 @@ See the task-oriented docs in [`doc/README.md`](doc/README.md) for installation,
 ## Features
 
 - **Declarative layouts:** Define one or multiple windows with nested pane structures in intuitive YAML.
-- **Smart session management:** Reattach to an existing session or create a new one from the current directory.
+- **Project-scoped workspaces:** Reuse the right project and workspace identity, even across same-named directories or manually renamed tmux sessions.
 - **Zero-config default:** Run `tmuxify` in any directory to get a useful four-pane workspace.
 - **Initial focus:** Start in the window or pane you care about most.
 - **Opt-in pane names:** Display stable border labels without changing existing layouts or application titles (tmux 3.2+).
@@ -58,9 +58,11 @@ tmuxify
 Configuration priority:
 
 1. `--file <path>` uses the specified YAML file.
-2. `.tmuxify.yml` in the current directory.
+2. `.tmuxify.yml` at the resolved project root.
 3. `${XDG_CONFIG_HOME:-~/.config}/tmuxify/layouts/default.yml` for a reusable user default.
 4. Built-in default four-pane layout when no config exists.
+
+Within a Git worktree, the nearest `.tmuxify.yml` defines the project root; without one, the worktree root is used. Outside Git, the current directory remains the root. Use `--root DIR` to override it. `--file` selects a template, not a working directory. See [project discovery and naming](doc/configuration.md#project-root).
 
 Tmuxify reserves `${XDG_CONFIG_HOME:-~/.config}/tmuxify/` for user-level files. `tmuxify --update` creates the config folders, refreshes bundled examples under `layouts/examples/`, and refreshes shell completions under `completions/`. Put your reusable default layout at `layouts/default.yml`:
 
@@ -80,6 +82,7 @@ cp "${XDG_CONFIG_HOME:-$HOME/.config}/tmuxify/layouts/examples/golang-dev.yml" \
 | `--list` | `-l` | List active tmux sessions. |
 | `--list-layouts` | | List project and user layout files. |
 | `--file FILE` | `-f` | Use a specific layout file. |
+| `--root DIR` | | Use an explicit project root. |
 | `--export [FILE]` | `-e` | Export current tmux session layout to a simplified YAML template. |
 | `--dry-run` | | Validate and preview the selected layout without creating a tmux session. |
 | `--detach` | | Create the tmux session without attaching/switching to it. |
@@ -90,9 +93,12 @@ Useful safe workflow:
 ```bash
 tmuxify --list-layouts             # list project/default/example layouts
 tmuxify --dry-run                  # inspect the selected layout
-tmuxify --no-commands              # create panes without running commands
 tmuxify                            # normal trusted-project flow
+# Or, instead of normal launch:
+tmuxify --no-commands              # create panes without running commands
 ```
+
+`--no-commands` is a creation choice: running normally afterward reuses that workspace without starting the skipped commands. Start them manually or deliberately recreate it after saving your work.
 
 ## Shell completions
 
@@ -137,7 +143,7 @@ Define layouts in YAML using a nested tree structure:
 
 ```yaml
 session:
-  name: my-project            # Optional: uses directory name if omitted
+  name: my-project            # Optional project-scoped workspace name; omitted = default
   initial_focus: editor       # Optional: focus this pane on startup
 
 layout:
@@ -197,7 +203,7 @@ tmuxify --file examples/layouts/golang-dev.yml
 : Install Mike Farah's `yq`, not the Python wrapper with the same name.
 
 **The session already exists**
-: Tmuxify attaches/switches to an existing session with the same name. Use a different `session.name` if you want a separate workspace.
+: Tmuxify reuses a ready session with matching full project/workspace identity. `session.name` selects a workspace within a project, not the literal tmux target. Actual names look like `api--tests--97124f8c`; detached output prints the exact attach command.
 
 **I want to use tmuxify in a script**
 : Use `tmuxify --detach --file layout.yml`, then attach later with `tmux attach -t <session>`.
@@ -219,6 +225,8 @@ Contributions are welcome and appreciated.
 ## Backward compatibility
 
 Tmuxify v2+ uses recursive layouts and still provides a useful default when no configuration is selected. Version 2.6.0 adds explicit one/multiple-window layouts without removing or deprecating legacy top-level `layout` files; existing valid files require no migration.
+
+**Breaking change (Unreleased):** project identity changes the naming/lookup contract and working directories for subdirectory launches. Scripts targeting literal `session.name` values must use the reported concrete tmux names instead. Old unscoped sessions are left untouched, not adopted. The first new launch may start another copy of their programs; preview and consider `--no-commands` during migration. See [migration guidance](doc/configuration.md#compatibility-and-migration). Layout geometry and commands are not reconciled on reuse.
 
 ## License
 

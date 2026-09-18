@@ -8,17 +8,25 @@ _tmuxify_option_words() {
   _tmuxify_completion_options | tr '|:' '\n' | grep '^-'
 }
 
-_tmuxify_file_options() {
-  _tmuxify_completion_options | awk -F: '$2 == "file" { print $1 }' | tr '|' '\n'
+_tmuxify_argument_options() {
+  _tmuxify_completion_options | awk -F: -v kind="$1" '$2 == kind { print $1 }' | tr '|' '\n'
 }
 
 _tmuxify() {
-  local cur prev opts file_opts candidate
+  local cur prev opts file_opts directory_opts candidate
   COMPREPLY=()
   cur=${COMP_WORDS[COMP_CWORD]}
   prev=${COMP_WORDS[COMP_CWORD-1]}
   opts=$(_tmuxify_option_words)
-  file_opts=$(_tmuxify_file_options)
+  file_opts=$(_tmuxify_argument_options file)
+  directory_opts=$(_tmuxify_argument_options directory)
+
+  if printf '%s\n' "$directory_opts" | grep -Fxq -- "$prev"; then
+    while IFS= read -r candidate; do
+      COMPREPLY+=("$candidate")
+    done < <(compgen -d -- "$cur")
+    return 0
+  fi
 
   if printf '%s\n' "$file_opts" | grep -Fxq -- "$prev"; then
     while IFS= read -r candidate; do

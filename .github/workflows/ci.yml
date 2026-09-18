@@ -19,7 +19,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y tmux shellcheck curl python3 zsh
+          sudo apt-get install -y tmux shellcheck curl python3 zsh build-essential pkg-config libevent-dev libncurses-dev
           sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_amd64
           sudo chmod +x /usr/local/bin/yq
 
@@ -28,6 +28,20 @@ jobs:
 
       - name: Run integration tests
         run: tests/run.sh
+
+      - name: Exercise project identity on real tmux 2.1
+        run: |
+          build="$RUNNER_TEMP/tmux-baseline"
+          mkdir -p "$build"
+          curl -fsSL https://github.com/tmux/tmux/releases/download/2.1/tmux-2.1.tar.gz -o "$build/tmux.tar.gz"
+          echo "31564e7bf4bcef2defb3cb34b9e596bd43a3937cad9e5438701a81a5a9af6176  $build/tmux.tar.gz" | sha256sum -c -
+          tar -xzf "$build/tmux.tar.gz" -C "$build"
+          (cd "$build/tmux-2.1" && CFLAGS=-fcommon ./configure --prefix="$build/install" && make -j2 && make install)
+          export PATH="$build/install/bin:$PATH"
+          test "$(tmux -V)" = 'tmux 2.1'
+          bash tests/project-identity-test.sh
+          bash tests/identity-lifecycle-test.sh
+          bash tests/identity-attach-test.sh
 
   completion-bash32:
     runs-on: macos-latest
@@ -53,3 +67,11 @@ jobs:
       - name: Exercise pane names on the advertised Bash baseline
         shell: /bin/bash {0}
         run: TMUXIFY_BASH=/bin/bash /bin/bash tests/pane-names-test.sh
+
+      - name: Exercise project identity on the advertised Bash baseline
+        shell: /bin/bash {0}
+        run: |
+          export TMUXIFY_BASH=/bin/bash
+          /bin/bash tests/project-identity-test.sh
+          /bin/bash tests/identity-lifecycle-test.sh
+          /bin/bash tests/identity-attach-test.sh

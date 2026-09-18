@@ -18,6 +18,8 @@ def complete(text):
     with tempfile.TemporaryDirectory(prefix="tmuxify-zsh-") as directory:
         work = Path(directory)
         (work / "layout with spaces.yml").touch()
+        (work / "project with spaces").mkdir()
+        (work / "project-file").touch()
         result = work / "buffer"
         setup = work / ".zshrc"
         setup.write_text(
@@ -80,3 +82,8 @@ for flag in ("--file", "-f", "--export", "-e"):
         buffer, _ = complete(text)
         assert buffer.strip() == text + r"\ with\ spaces.yml", repr(buffer)
 print("ok - zsh completes spaced filenames for long and short file options")
+
+for prefix in ("", "--detach "):
+    buffer, _ = complete(f"tmuxify {prefix}--root project")
+    assert buffer.strip() == f"tmuxify {prefix}--root " + r"project\ with\ spaces/", repr(buffer)
+print("ok - zsh completes only directories for project roots")
