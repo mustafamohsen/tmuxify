@@ -189,7 +189,7 @@ echo 'ok - export preserves portable selectors, including manually renamed sessi
 
 # Identity, readiness, and duplicates are public ownership checks, not name guesses.
 identity=$("$REAL_TMUX" show-options -qv -t "$first" @tmuxify_workspace_identity)
-for state in building invalid ''; do
+for state in building invalid '' $'ready\n'; do
   "$REAL_TMUX" set-option -t "$first" @tmuxify_workspace_state "$state"
   expect_failure --root "$TEST_DIR/a/api" --file "$TEST_DIR/repo/.tmuxify.yml" --detach
   contains "$(<"$TEST_DIR/output")" readiness
@@ -287,7 +287,7 @@ cwd_session=$(managed_id "${project_root%/*}/space project;" named 'cwd: #litera
 paths=$("$REAL_TMUX" list-panes -s -t "$cwd_session" -F '#{pane_current_path}')
 [[ $(printf '%s\n' "$paths" | wc -l | tr -d ' ') == 3 ]] || fail 'expected three panes across two windows'
 [[ $(printf '%s\n' "$paths" | sort -u) == "${project_root%/*}/space project;" ]] || fail 'multi-window root was not applied to every pane'
-echo 'ok - all windows use the explicit root and workspace names stay literal data'
+echo 'ok - all windows use the discovered punctuation-containing root and workspace names stay literal data'
 inactive=$("$REAL_TMUX" list-panes -s -t "$cwd_session" -F '#{pane_id}' | tail -n 1)
 export_managed "$cwd_session" "$TEST_DIR/export-inactive.yml" "$inactive"
 [[ $(yq -r '.session.initial_focus' "$TEST_DIR/export-inactive.yml") == window1_pane1 ]] || fail 'export captured caller pane instead of session active focus'

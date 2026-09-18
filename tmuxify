@@ -558,8 +558,10 @@ resolve_workspace_session() {
   done < "$TMP_DIR/sessions"
   [ "$matches" -le 1 ] || die "Multiple sessions claim this workspace identity; inspect them with tmux before retrying."
   if [ "$matches" -eq 1 ]; then
-    state=$(session_option "$MATCHING_SESSION_ID" @tmuxify_workspace_state) || exit 1
-    [ "$state" = ready ] || die "Workspace $MATCHING_SESSION_ID is building or has invalid readiness; inspect it or retry later."
+    # Keep tmux's output newline plus a sentinel: command substitution must not
+    # turn an invalid value such as "ready\n" into the exact readiness token.
+    state=$(session_option "$MATCHING_SESSION_ID" @tmuxify_workspace_state && printf '.') || exit 1
+    [ "$state" = $'ready\n.' ] || die "Workspace $MATCHING_SESSION_ID is building or has invalid readiness; inspect it or retry later."
   elif [ "$occupied" -eq 1 ]; then
     die "Session name '$session_name' is occupied without a matching identity. Nothing was adopted or changed."
   fi
@@ -573,8 +575,8 @@ commit_workspace() {
   else
     # A failed acknowledgement does not prove the publication failed. Preserve
     # a ready session, or one whose commit outcome cannot be inspected safely.
-    if state=$(tmux show-options -qv -t "$CREATED_SESSION_ID" @tmuxify_workspace_state); then
-      [ "$state" != ready ] || SESSION_CREATED=0
+    if state=$(tmux show-options -qv -t "$CREATED_SESSION_ID" @tmuxify_workspace_state && printf '.'); then
+      [ "$state" != $'ready\n.' ] || SESSION_CREATED=0
     else
       SESSION_CREATED=0
     fi
@@ -1192,7 +1194,7 @@ SESSION_CREATING=0
 tmux_or_die tmux set-option -t "$CREATED_SESSION_ID" @tmuxify_workspace_identity "$WORKSPACE_IDENTITY"
 tmux_or_die tmux set-option -t "$CREATED_SESSION_ID" @tmuxify_workspace_state building
 [ "$(session_option "$CREATED_SESSION_ID" @tmuxify_workspace_identity)" = "$WORKSPACE_IDENTITY" ] &&
-  [ "$(session_option "$CREATED_SESSION_ID" @tmuxify_workspace_state)" = building ] || die "Failed to verify new workspace metadata."
+  [ "$(session_option "$CREATED_SESSION_ID" @tmuxify_workspace_state && printf '.')" = $'building\n.' ] || die "Failed to verify new workspace metadata."
 info "Building layout from $CONFIG_SOURCE..."
 tmux_or_die tmux set-window-option -t "$CREATED_SESSION_ID:" aggressive-resize on
 root_pane=$(tmux display-message -t "$CREATED_SESSION_ID:" -p '#{pane_id}') || die "Failed to identify initial pane."
