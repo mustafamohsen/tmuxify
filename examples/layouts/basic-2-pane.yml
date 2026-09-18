@@ -2,7 +2,7 @@
 # Minimal editor + shell starter for almost any project
 
 session:
-  name: null  # Auto-generate from the current folder path
+  name: null  # Default workspace within the resolved project
   initial_focus: editor
 
 layout:

@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Project-root discovery bounded by conventional Git worktree markers, with an authoritative `--root DIR` override and directory completion in Bash and Zsh.
+- Project-scoped default and named workspaces, deterministic readable tmux names, full session-local identity verification, and committed readiness for safe reuse.
+- Public identity, concurrency/failure, and attached-client tests; real tmux 2.1 and Bash 3.2 compatibility coverage.
+
+### Changed
+- `session.name` now selects a workspace within a canonical project root, not a literal server-wide tmux name. Existing legacy sessions are left untouched; first migration can start duplicate programs, so preview and consider `--no-commands`.
+- All new panes start at the resolved project root. Layout templates remain independent of root selection and are snapshotted for each invocation.
+- Reuse follows full identity through manual tmux renames and never reconciles or restarts a running workspace. Collisions, ambiguous ownership, and incomplete construction fail explicitly.
+- Preview/layout listing expose project context. Export preserves portable workspace selectors without embedding generated names or roots, while retaining its simplified geometry and active-focus contract.
+- The integration suite owns a private tmux server instead of cleaning up sessions by a shared-server name prefix.
+
 ## [2.7.1] – 2026-09-18
 
 ### Fixed

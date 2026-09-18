@@ -31,12 +31,14 @@ layout:
 
 | Key | Required | Description |
 |---|---:|---|
-| `session.name` | No | tmux session name. If omitted, tmuxify uses the current directory name. Invalid tmux characters are sanitized. |
+| `session.name` | No | Project-scoped workspace selector: a nonempty string selects a named workspace; omitted, null, or empty selects the default. Not a literal tmux session name. |
 | `session.initial_focus` | No | Window or pane `id` to focus after the layout is built. In legacy layouts it must match a pane ID. |
 | `session.pane_names.enabled` | No | Explicit YAML boolean `true` enables pane names. Otherwise all pane-name settings remain ignored. |
 | `session.pane_names.border` | No | When enabled: `preserve` (default), `top`, or `bottom`. See [pane names](#pane-names-opt-in). |
 | `layout` | One of `layout`/`windows` | Legacy root layout node. |
 | `windows` | One of `layout`/`windows` | One or more explicitly configured windows. `layout` and `windows` cannot be combined. |
+
+Workspace names are case-sensitive and literal, without control characters. Non-string/non-null values are invalid. Project root plus selector defines identity; layout contents and path do not. Concrete session names include sanitized labels and an identity suffix, and reuse verifies full session-local metadata. See [naming and migration](configuration.md#session-names). Geometry, commands, and focus syntax remain unchanged.
 
 ## Explicit windows
 

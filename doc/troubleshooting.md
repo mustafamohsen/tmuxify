@@ -84,13 +84,13 @@ For explicit windows, a window ID focuses its first pane; a pane ID focuses that
 
 ## Custom indexes or renumbering seem to select the wrong target
 
-Tmuxify uses native tmux window and pane IDs and does not assume index zero. If results appear stale, check whether a same-named session already exists; existing sessions are reused without reconciliation.
+Tmuxify uses native tmux IDs and does not assume index zero. If results appear stale, check whether a workspace with the same full project/selector identity already exists; it is reused without reconciliation.
 
 ## Pane names are not visible
 
 Names are ignored unless `session.pane_names.enabled` is the YAML boolean `true` (not the string `"true"`). With naming enabled, the default `border: preserve` keeps your existing tmux formatting. Set `border: top` or `bottom` to explicitly enable managed labels, or reference `#{@tmuxify_pane_label}` in your own border format.
 
-A same-named existing session is reused without applying configuration changes. Try a different session name to inspect the new layout without disturbing an existing workspace. Pane naming requires tmux 3.2+ for new workspaces; upgrade tmux or remove the opt-in to keep the previous behavior. Names are not exported.
+An existing matching workspace is reused without applying configuration changes. Choose another `session.name` selector to inspect a separate workspace; renaming the existing tmux session alone does not change its identity. Pane naming requires tmux 3.2+ for new workspaces; upgrade tmux or remove the opt-in to keep the previous behavior. Names are not exported.
 
 Managed names do not overwrite `pane_title`, so application title updates do not replace them. Enabling border labels uses terminal space and can affect pane dimensions. See [pane names](layout-schema.md#pane-names-opt-in).
 
@@ -102,11 +102,18 @@ Tmuxify cannot undo external side effects of programs whose commands were alread
 
 ## Session attaches instead of rebuilding
 
-If a tmux session with the target name already exists, tmuxify attaches or switches to it. Kill or rename the existing session to rebuild:
+A ready session with matching project/workspace identity is reused unchanged. Changing layout contents or manually renaming the tmux session does not rebuild it. Choose a different `session.name` selector, or save your work and deliberately remove the actual session with tmux before recreating it. Use `tmuxify --list` to inspect concrete names; they are no longer the literal YAML selector.
 
-```bash
-tmux kill-session -t <session-name>
-```
+## Unexpected root, old session, or workspace collision
+
+- Inspect `--dry-run` for the resolved root and selected layout. A nested `.tmuxify.yml` defines a project scope inside a worktree. Outside Git, use `--root DIR` to select an ancestor project explicitly.
+- `--file` does not change the project root. Relative root/file arguments both use the invocation directory.
+- Legacy unscoped sessions remain untouched; a first new launch can start duplicate programs. Consider `--no-commands` while migrating.
+- A workspace created with `--no-commands` stays command-free on reuse. Start commands manually or intentionally recreate it after saving work.
+- An occupied generated name with unverified metadata is not adopted. Inspect the reported session rather than deleting it blindly.
+- Multiple sessions claiming one identity, or a session left `building`, require manual inspection. Retry if another launch is still constructing it; tmuxify does not automatically repair or remove abandoned work.
+- Directory moves create a new path identity. Replacing a project at the same path retains its identity, so retire its old workspace deliberately.
+- Invalid UTF-8 or control characters in project paths/workspace names are rejected to avoid ambiguous identity and unsafe output.
 
 ## Commands ran unexpectedly
 
