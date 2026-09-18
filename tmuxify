@@ -823,7 +823,7 @@ yaml_scalar() {
 
 export_session() {
   local current_session safe_session export_dir export_base temp_export active_pane window_count window_number native_window window_name pane_count pane_number native_pane focus_id
-  local current_id metadata identity export_name
+  local current_id metadata identity export_name identity_option
   local -a export_target
   export_target=()
   [ -z "${TMUX_PANE:-}" ] || export_target=(-t "$TMUX_PANE")
@@ -833,9 +833,12 @@ export_session() {
   current_session=$(tmux display-message -p "${export_target[@]}" '#{session_name}') || die "Failed to read current tmux session."
   current_id=$(tmux display-message -p "${export_target[@]}" '#{session_id}') || die "Failed to identify current tmux session."
   [ -n "$current_session" ] && [ -n "$current_id" ] || die "Current tmux session disappeared."
-  metadata=$(session_option "$current_id" @tmuxify_workspace_identity) || exit 1
+  # Without -v, an explicitly empty local option still includes its name.
+  # Absence permits legacy export; presence always requires a valid identity.
+  identity_option=$(tmux show-options -q -t "$current_id" @tmuxify_workspace_identity) || die "Failed to read workspace metadata for $current_id."
   export_name=$(yaml_scalar "$current_session")
-  if [ -n "$metadata" ]; then
+  if [ -n "$identity_option" ]; then
+    metadata=$(session_option "$current_id" @tmuxify_workspace_identity) || exit 1
     identity=$(normalize_identity "$metadata") || die "Cannot export malformed or unsupported workspace identity."
     if [ "$(printf '%s' "$identity" | yq -p=json -r '.[2]')" = default ]; then
       export_name=null

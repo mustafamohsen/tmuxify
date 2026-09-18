@@ -187,6 +187,16 @@ run --root "$TEST_DIR/a/api" --file "$TEST_DIR/export-named.yml" --detach --no-c
 [[ $(managed_id "${project_root%/*}/a/api" named tests) == "$named" ]] || fail 'export changed workspace identity'
 echo 'ok - export preserves portable selectors, including manually renamed sessions'
 
+saved_identity=$("$REAL_TMUX" show-options -qv -t "$named" @tmuxify_workspace_identity)
+for malformed in '' 'broken' '["future", "/root", "default", ""]'; do
+  "$REAL_TMUX" set-option -t "$named" @tmuxify_workspace_identity "$malformed"
+  if export_managed "$named" "$TEST_DIR/export-malformed.yml" 2> "$TEST_DIR/export-error"; then fail 'export guessed a selector from malformed identity metadata'; fi
+  contains "$(<"$TEST_DIR/export-error")" 'malformed or unsupported workspace identity'
+  [[ ! -e "$TEST_DIR/export-malformed.yml" ]] || fail 'malformed metadata left an export file'
+done
+"$REAL_TMUX" set-option -t "$named" @tmuxify_workspace_identity "$saved_identity"
+echo 'ok - export rejects present but empty or malformed identity metadata'
+
 # Identity, readiness, and duplicates are public ownership checks, not name guesses.
 identity=$("$REAL_TMUX" show-options -qv -t "$first" @tmuxify_workspace_identity)
 for state in building invalid '' $'ready\n'; do
