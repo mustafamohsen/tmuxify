@@ -72,6 +72,12 @@ If `session.name` is missing, tmuxify derives the session name from the current 
 
 If a session with the exact name already exists, tmuxify attaches or switches to it instead of rebuilding panes. A longer name with the same prefix is a different workspace.
 
+## Pane names
+
+Pane IDs remain focus identifiers, not visible titles. To display stable names, explicitly set `session.pane_names.enabled: true`, choose `session.pane_names.border: top` or `bottom`, and add `name` to leaf panes. Creating a named workspace requires tmux 3.2+; other layouts keep the tmux 2.1 baseline.
+
+The default border mode is `preserve`, which records names without replacing your tmux border settings. Existing sessions are never renamed or restyled. See [pane name semantics and compatibility](layout-schema.md#pane-names-opt-in) and [the opt-in example](../examples/layouts/named-panes.yml).
+
 ## Commands and working directory
 
 Panes are created with the directory where `tmuxify` was run as their working directory. Each `command` is sent to tmux as shell input, like typing it and pressing Enter.

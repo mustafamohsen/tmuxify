@@ -33,6 +33,8 @@ layout:
 |---|---:|---|
 | `session.name` | No | tmux session name. If omitted, tmuxify uses the current directory name. Invalid tmux characters are sanitized. |
 | `session.initial_focus` | No | Window or pane `id` to focus after the layout is built. In legacy layouts it must match a pane ID. |
+| `session.pane_names.enabled` | No | Explicit YAML boolean `true` enables pane names. Otherwise all pane-name settings remain ignored. |
+| `session.pane_names.border` | No | When enabled: `preserve` (default), `top`, or `bottom`. See [pane names](#pane-names-opt-in). |
 | `layout` | One of `layout`/`windows` | Legacy root layout node. |
 | `windows` | One of `layout`/`windows` | One or more explicitly configured windows. `layout` and `windows` cannot be combined. |
 
@@ -84,11 +86,43 @@ layout:
 | Key | Required | Description |
 |---|---:|---|
 | `id` | No | Stable pane identifier for focus. Must start with a letter and contain only letters, numbers, `_`, or `-`. IDs must be unique. |
+| `name` | No | Opt-in visible label for a leaf pane, independent of `id`. Ignored unless `session.pane_names.enabled: true`. |
 | `size` | No | Percent from `1%` to `100%`, relative to the containing layout's available width or height. |
 | `command` | No | String sent to the pane as shell input after creation. |
 | `type` + `splits` | No | If present, the item is a nested layout container. |
 
-A leaf pane with neither `id` nor `command` is allowed, but tmuxify warns because it creates an unnamed empty shell.
+A leaf pane with neither `id` nor `command` is allowed, but tmuxify warns because it creates an unnamed empty shell. An enabled, valid `name` also suppresses this warning.
+
+### Pane names (opt-in)
+
+```yaml
+session:
+  pane_names:
+    enabled: true
+    border: top
+layout:
+  type: horizontal
+  splits:
+    - id: editor
+      name: "Editor"
+    - id: shell
+      name: "Terminal"
+```
+
+Names require **tmux 3.2+ only when creating an opted-in workspace** (pane-local metadata plus correct literal style escaping). Existing layouts retain the tmux 2.1 baseline and require no migration. Only the YAML boolean `true` activates the feature; omitted settings, `false`, and even the string `"true"` leave formerly ignored metadata ignored. With naming disabled, pane `name` fields are neither validated nor applied, and existing warnings and preview output remain unchanged.
+
+When enabled:
+
+- A name must be a non-empty, single-line string without control characters. Spaces, Unicode, quotes, and punctuation are allowed and displayed literally, not interpreted as commands, tmux formats, or styles.
+- Names may repeat and need no `id`. They never become focus targets. Names are allowed only on leaf panes, including leaves inside nested layouts, not on layout containers.
+- `preserve` records names without changing border visibility or formatting. This is the default: names may not be visible until your custom tmux format uses them.
+- `top` or `bottom` explicitly replaces the border position and format **only in newly created windows containing named panes**. Unnamed panes in those windows display their normal pane title. Windows without named panes, global options, and other sessions remain untouched.
+- Border labels consume terminal space and can affect pane dimensions. The border is configured before sizing; an impossible layout fails and its unfinished session is removed.
+- Names are stored in pane-local `@tmuxify_pane_name` (raw text) and `@tmuxify_pane_label` (escaped for tmux style rendering). Application-controlled `pane_title` is never changed. Custom border formats can use `#{@tmuxify_pane_label}`; do not recursively expand it with `E:`.
+- `--no-commands` still applies names. `--dry-run` validates and previews them without contacting tmux, and reports the feature's runtime requirement.
+- Existing sessions are reused without changing their names or borders. Export remains unchanged and does not export pane names or the opt-in settings.
+
+See [the named panes example](../examples/layouts/named-panes.yml).
 
 ### Size allocation
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Added explicit `session.pane_names.enabled: true` opt-in and optional leaf-pane `name` labels, separate from focus IDs and stable across application title updates (#21).
+- Added `preserve` (default), `top`, and `bottom` border modes, scoped to newly created windows with named panes. Managed borders consume terminal space; existing sessions and global settings are not modified.
+- Added name validation, dry-run previews, a safe example, and focused CLI/tmux regressions for compatibility, literal rendering, nested layouts, focus, command controls, version gating, export, and rollback.
+
+### Compatibility
+- Existing layouts, ignored name fields, default workspace, and export behavior remain unchanged without the explicit opt-in. Pane naming requires tmux 3.2+ only for new opted-in workspaces; other configurations retain the tmux 2.1 and Bash 3.2 baselines.
+
 ## [2.6.1] – 2026-09-09
 
 ### Fixed

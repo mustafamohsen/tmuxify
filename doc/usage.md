@@ -95,7 +95,7 @@ tmuxify --export my-layout.yml
 
 Export enumerates every window in deterministic tmux order, preserves visible window names, generates unique window/pane IDs, and records the active pane as `session.initial_focus`. User-controlled names are YAML encoded safely. It retains atomic-write and existing-file/symlink protections.
 
-The result is a simplified starter template, not a backup: export does not recover commands, shell state/history, working directories, environment, or exact pane geometry. Review and adapt the generated file, then validate it with `tmuxify --dry-run --file <file>`.
+The result is a simplified starter template, not a backup: export does not recover commands, shell state/history, working directories, environment, exact pane geometry, or opt-in pane names and border settings. Review and adapt the generated file, then validate it with `tmuxify --dry-run --file <file>`.
 
 ## Existing sessions and creation failures
 

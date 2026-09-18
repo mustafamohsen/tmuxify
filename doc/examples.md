@@ -27,6 +27,7 @@ ${XDG_CONFIG_HOME:-$HOME/.config}/tmuxify/layouts/examples
 | `fullstack-dev.yml` | Backend/frontend monorepo starter. |
 | `golang-dev.yml` | Go project workbench. |
 | `multi-window-development.yml` | Safe two-window development, tests, and logs starter. |
+| `named-panes.yml` | Explicitly enabled, stable border labels for nested panes (tmux 3.2+). |
 
 ## Multi-window starter
 
