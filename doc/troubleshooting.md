@@ -86,6 +86,14 @@ For explicit windows, a window ID focuses its first pane; a pane ID focuses that
 
 Tmuxify uses native tmux window and pane IDs and does not assume index zero. If results appear stale, check whether a same-named session already exists; existing sessions are reused without reconciliation.
 
+## Pane names are not visible
+
+Names are ignored unless `session.pane_names.enabled` is the YAML boolean `true` (not the string `"true"`). With naming enabled, the default `border: preserve` keeps your existing tmux formatting. Set `border: top` or `bottom` to explicitly enable managed labels, or reference `#{@tmuxify_pane_label}` in your own border format.
+
+A same-named existing session is reused without applying configuration changes. Try a different session name to inspect the new layout without disturbing an existing workspace. Pane naming requires tmux 3.2+ for new workspaces; upgrade tmux or remove the opt-in to keep the previous behavior. Names are not exported.
+
+Managed names do not overwrite `pane_title`, so application title updates do not replace them. Enabling border labels uses terminal space and can affect pane dimensions. See [pane names](layout-schema.md#pane-names-opt-in).
+
 ## A creation failure occurred
 
 A detected structural failure or HUP/INT/TERM interruption during setup removes the newly created unfinished session and temporary files. Existing and unrelated sessions are preserved. Once setup is complete, attachment or client-switching failure leaves the workspace available to attach later. Temporary files are cleaned before handing control to tmux.

@@ -14,6 +14,7 @@ See the task-oriented docs in [`doc/README.md`](doc/README.md) for installation,
 - **Smart session management:** Reattach to an existing session or create a new one from the current directory.
 - **Zero-config default:** Run `tmuxify` in any directory to get a useful four-pane workspace.
 - **Initial focus:** Start in the window or pane you care about most.
+- **Opt-in pane names:** Display stable border labels without changing existing layouts or application titles (tmux 3.2+).
 - **Safe preview:** Use `--dry-run` to validate and inspect a layout without touching tmux.
 - **Command control:** Use `--no-commands` when you want panes created without running layout commands.
 - **Detached mode:** Use `--detach` for scripts, CI, or remote setup flows.
@@ -21,7 +22,7 @@ See the task-oriented docs in [`doc/README.md`](doc/README.md) for installation,
 ## Requirements
 
 - Bash 3.2 or newer
-- [tmux](https://github.com/tmux/tmux) 2.1 or newer
+- [tmux](https://github.com/tmux/tmux) 2.1 or newer (3.2+ only for opt-in pane names)
 - [Mike Farah yq](https://github.com/mikefarah/yq) v4+
 
 ## Installation
@@ -172,6 +173,12 @@ This creates:
 A file contains exactly one of the backward-compatible top-level `layout` form shown above or a non-empty `windows` sequence. Each explicit window requires `id`, visible `name`, and `layout`; entries are created in order. Window and pane IDs use one globally unique namespace. `session.initial_focus` accepts a window ID (its first pane) or pane ID (that exact pane), defaulting to the first window's first pane. Visible names are not IDs.
 
 An empty `windows`, mixed `layout`/`windows`, invalid or duplicate IDs, unresolved focus, malformed recursive nodes, invalid sizes, and non-string commands are rejected before session creation. See the authoritative [layout schema](doc/layout-schema.md), including one- and multi-window examples and compatibility details.
+
+### Optional pane names
+
+Stable pane labels are opt-in: set `session.pane_names.enabled: true`, `session.pane_names.border: top` (or `bottom`), and a `name` on each desired leaf pane. Names are separate from focus IDs. This feature requires tmux 3.2+; existing layouts keep their current behavior and tmux 2.1 baseline. Omitting `border` preserves your existing border settings.
+
+See the [schema and compatibility details](doc/layout-schema.md#pane-names-opt-in) and [named panes example](examples/layouts/named-panes.yml). Thanks to Marco ([@fscaptain](https://github.com/fscaptain)) for requesting this in [#21](https://github.com/mustafamohsen/tmuxify/issues/21).
 
 ## Example layouts
 

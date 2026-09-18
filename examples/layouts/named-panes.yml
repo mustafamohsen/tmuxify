@@ -1,0 +1,22 @@
+# Opt-in stable pane labels (tmux 3.2+). Existing layouts need no changes.
+# Without border: top/bottom, existing tmux border settings are preserved.
+session:
+  name: named-panes
+  initial_focus: editor
+  pane_names:
+    enabled: true
+    border: top
+layout:
+  type: horizontal
+  splits:
+    - id: editor
+      name: Editor
+      size: 60%
+      command: "printf '%s\n' 'Editor pane ready; start your preferred editor.'"
+    - type: vertical
+      splits:
+        - id: tests
+          name: Tests
+          command: "printf '%s\n' 'Tests pane ready; run your project tests here.'"
+        - id: shell
+          name: Terminal

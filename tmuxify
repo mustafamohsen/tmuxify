@@ -19,6 +19,8 @@ COMPLETION_OPTIONS=0
 DRY_RUN=0
 DETACH=0
 RUN_COMMANDS=1
+PANE_NAMES_ENABLED=0
+PANE_NAMES_BORDER="preserve"
 TMP_DIR=""
 EXPORT_TEMP_FILE=""
 UPDATE_STAGE_FILE=""
@@ -55,6 +57,12 @@ Options:
 
 Completion metadata:
       --completion-options   Print machine-readable option metadata
+
+Optional pane names (YAML configuration, not CLI flags):
+  Set session.pane_names.enabled: true and add name to leaf panes (tmux 3.2+).
+  session.pane_names.border: preserve (default), top, or bottom.
+  preserve keeps your border settings; top/bottom display stable pane labels.
+  Without the opt-in, existing layouts retain their behavior and tmux 2.1 baseline.
 
 Security note:
   Layout commands are shell commands. Review layouts from untrusted projects first,
@@ -388,6 +396,7 @@ init_tmp_dir() {
     : > "$TMP_DIR/seen_ids"
     : > "$TMP_DIR/window_id_map"
     : > "$TMP_DIR/configured_commands"
+    : > "$TMP_DIR/named_pane_paths"
   fi
 }
 
@@ -441,11 +450,41 @@ validate_size() {
   fi
 }
 
+# Only an explicit YAML boolean true activates the new schema. Everything else
+# retains the historical treatment of these keys as ignored metadata.
+configure_pane_names() {
+  local enabled valid_border
+  enabled=$(yq -r '.session | select(tag == "!!map") | .pane_names | select(tag == "!!map") | .enabled | select(tag == "!!bool")' "$CONFIG_FILE")
+  [ "$enabled" = "true" ] || return 0
+  PANE_NAMES_ENABLED=1
+  if [ "$(yq -r '.session.pane_names | has("border")' "$CONFIG_FILE")" = "true" ]; then
+    # Compare the original scalar before command substitution strips newlines.
+    valid_border=$(yq -r '.session.pane_names.border | ((tag == "!!str") and (. == "preserve" or . == "top" or . == "bottom"))' "$CONFIG_FILE")
+    [ "$valid_border" = "true" ] || die "session.pane_names.border must be preserve, top, or bottom."
+    PANE_NAMES_BORDER=$(yq -r '.session.pane_names.border' "$CONFIG_FILE")
+  fi
+}
+
+validate_pane_name() {
+  local path name_type invalid_name
+  path="$1"
+  [ "$PANE_NAMES_ENABLED" -eq 1 ] || return 0
+  [ "$(yq -r "$path | has(\"name\")" "$CONFIG_FILE")" = "true" ] || return 0
+  [ "$2" != "true" ] || die "Pane name at $path.name is only allowed on leaf panes, not layout containers."
+  name_type=$(yq -r "$path.name | type" "$CONFIG_FILE")
+  [ "$name_type" = "!!str" ] || die "Pane name at $path.name must be a non-empty single-line string without control characters."
+  # Validate before shell extraction, which would discard trailing newlines.
+  invalid_name=$(yq -r "$path.name | ((length == 0) or test(\"[\\x00-\\x1f\\x7f-\\x9f]\"))" "$CONFIG_FILE")
+  [ "$invalid_name" = "false" ] || die "Pane name at $path.name must be a non-empty single-line string without control characters."
+  printf '%s\n' "$path" >> "$TMP_DIR/named_pane_paths"
+}
+
 validate_layout_node() {
   local path node_type layout_type splits_type count i item_path item_type size has_nested has_command pane_id command_type
   path="$1"
   node_type=$(yq -r "$path | type" "$CONFIG_FILE")
   [ "$node_type" = "!!map" ] || die "Expected layout object at $path."
+  validate_pane_name "$path" true
 
   layout_type=$(yq -r "$path.type // \"\"" "$CONFIG_FILE")
   case "$layout_type" in
@@ -471,11 +510,16 @@ validate_layout_node() {
     has_command=$(yq -r "$item_path | has(\"command\")" "$CONFIG_FILE")
     pane_id=$(yq -r "$item_path.id // \"\"" "$CONFIG_FILE")
     record_seen_id "$pane_id" "$item_path.id"
+    validate_pane_name "$item_path" "$has_nested"
 
     if [ "$has_nested" = "true" ]; then
       validate_layout_node "$item_path"
     else
-      [ -n "$pane_id" ] || [ "$has_command" = "true" ] || warn "Pane at $item_path has no id or command; it will be created as an empty shell."
+      if [ -z "$pane_id" ] && [ "$has_command" != "true" ]; then
+        if [ "$PANE_NAMES_ENABLED" -eq 0 ] || [ "$(yq -r "$item_path | has(\"name\")" "$CONFIG_FILE")" != "true" ]; then
+          warn "Pane at $item_path has no id or command; it will be created as an empty shell."
+        fi
+      fi
     fi
 
     if [ "$has_command" = "true" ]; then
@@ -493,6 +537,7 @@ validate_config() {
   if ! yq eval '.' "$CONFIG_FILE" >/dev/null 2>&1; then
     die "Invalid YAML syntax in $CONFIG_FILE"
   fi
+  configure_pane_names
   has_layout=$(yq -r 'has("layout")' "$CONFIG_FILE")
   has_windows=$(yq -r 'has("windows")' "$CONFIG_FILE")
   [ "$has_layout" != "true" ] || [ "$has_windows" != "true" ] || die "Configuration cannot contain both layout and windows."
@@ -560,6 +605,9 @@ print_plan_node() {
     label="pane"
     [ "$has_nested" = "true" ] && label="nested"
     printf '%s- %s id=%s size=%s' "$child_indent" "$label" "${pane_id:-none}" "$size"
+    if [ "$PANE_NAMES_ENABLED" -eq 1 ] && [ "$(yq -r "$item_path | has(\"name\")" "$CONFIG_FILE")" = "true" ]; then
+      printf ' name=%s' "$(yaml_scalar "$(yq -r "$item_path.name" "$CONFIG_FILE")")"
+    fi
     if [ "$has_command" = "true" ]; then
       command_text=$(yq -r "$item_path.command" "$CONFIG_FILE")
       printf ' command=%s' "$command_text"
@@ -719,6 +767,9 @@ fi
 if [ "$DRY_RUN" -eq 1 ]; then
   success "Configuration is valid."
   printf 'Session: %s\n' "$session_name"
+  if [ "$PANE_NAMES_ENABLED" -eq 1 ]; then
+    printf 'Pane names: enabled (border: %s; requires tmux 3.2+)\n' "$PANE_NAMES_BORDER"
+  fi
   printf 'Layout plan:\n'
   if [ "$(yq -r 'has("windows")' "$CONFIG_FILE")" = "true" ]; then
     window_count=$(yq -r '.windows | length' "$CONFIG_FILE")
@@ -763,6 +814,12 @@ if tmux has-session -t "=$session_name" 2>/dev/null; then
   attach_or_switch "$session_name"
 fi
 
+# Pane-local options need 3.0, but literal style escaping also needs tmux 3.2.
+# The old baseline still applies without opt-in; reuse above needs neither.
+if [ "$PANE_NAMES_ENABLED" -eq 1 ] && { [ "$TMUX_MAJOR" -lt 3 ] || { [ "$TMUX_MAJOR" -eq 3 ] && [ "$TMUX_MINOR" -lt 2 ]; }; }; then
+  die "Pane names require tmux 3.2 or newer. Upgrade tmux or remove session.pane_names.enabled."
+fi
+
 tmux_or_die() {
   if ! "$@"; then
     die "Command failed: $*"
@@ -803,6 +860,34 @@ allocate_pane_sizes() {
       }
       printf "\n"
     }'
+}
+
+configure_pane_name_border() {
+  local layout_path native_window
+  [ "$PANE_NAMES_ENABLED" -eq 1 ] || return 0
+  [ "$PANE_NAMES_BORDER" != "preserve" ] || return 0
+  layout_path="$1"
+  native_window="$2"
+  # Only validated leaf paths count, not names inside ignored custom metadata.
+  grep -Fq "$layout_path.splits[" "$TMP_DIR/named_pane_paths" || return 0
+  # Set the border before splitting so sizing sees the actual available space.
+  tmux_or_die tmux set-option -w -t "$native_window" pane-border-status "$PANE_NAMES_BORDER"
+  tmux_or_die tmux set-option -w -t "$native_window" pane-border-format '#{?#{!=:#{@tmuxify_pane_name},},#{@tmuxify_pane_label},#{pane_title}}'
+}
+
+set_configured_pane_name() {
+  local item_path pane_target pane_name
+  [ "$PANE_NAMES_ENABLED" -eq 1 ] || return 0
+  item_path="$1"
+  pane_target="$2"
+  [ "$(yq -r "$item_path | has(\"name\")" "$CONFIG_FILE")" = "true" ] || return 0
+  pane_name=$(yq -r "$item_path.name" "$CONFIG_FILE")
+  # tmux also parses a trailing semicolon in an argv value as a separator.
+  case "$pane_name" in *';') pane_name="${pane_name%;}\\;" ;; esac
+  tmux_or_die tmux set-option -p -t "$pane_target" @tmuxify_pane_name "$pane_name"
+  # Formats are not recursively expanded. Escape hashes as well so tmux's
+  # subsequent style renderer treats #[...] as text, not styling directives.
+  tmux_or_die tmux set-option -p -t "$pane_target" @tmuxify_pane_label "${pane_name//#/##}"
 }
 
 queue_configured_command() {
@@ -868,6 +953,8 @@ build_layout() {
     fi
     if [ "$has_nested" = "true" ]; then
       build_layout "$item_path" "$current_pane"
+    else
+      set_configured_pane_name "$item_path" "$current_pane"
     fi
     if [ "$has_command" = "true" ]; then
       queue_configured_command "$current_pane" "$item_path"
@@ -913,10 +1000,12 @@ if [ "$(yq -r 'has("windows")' "$CONFIG_FILE")" = "true" ]; then
     fi
     printf '%s\t%s\t%s\n' "$window_id" "$native_window" "$window_pane" >> "$TMP_DIR/window_id_map"
     tmux_or_die tmux set-window-option -t "$native_window" aggressive-resize on
+    configure_pane_name_border ".windows[$i].layout" "$native_window"
     build_layout ".windows[$i].layout" "$window_pane"
     i=$((i + 1))
   done
 else
+  configure_pane_name_border ".layout" "$root_pane"
   build_layout ".layout" "$root_pane"
 fi
 

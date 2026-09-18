@@ -31,7 +31,9 @@ ShellCheck should pass without behavior-changing rewrites. If a deliberate `bash
 
 Focused regression scripts named `tests/*-test.sh` can also be run individually; the full suite discovers them automatically. Completion behavior is tested on current Bash and on the advertised Bash 3.2 baseline in macOS CI. On macOS, run `/bin/bash tests/completion-test.sh` to check the system Bash directly; completion tests need neither tmux nor yq.
 
-The script itself needs Bash, tmux, and Mike Farah `yq` v4. Some tests may stub dependencies, but installing the real tools is best for end-to-end checks.
+The script itself needs Bash, tmux, and Mike Farah `yq` v4. The pane-name tests additionally need tmux 3.2+ and Python 3 (standard library only) to verify literal border rendering through a real attached pseudo-terminal. Python is a test dependency, not a tmuxify runtime dependency. Some tests may stub dependencies, but installing the real tools is best for end-to-end checks.
+
+Run `TMUXIFY_BASH=/bin/bash /bin/bash tests/pane-names-test.sh` on macOS to check the feature against Bash 3.2. CI exercises both completion and pane names on that baseline.
 
 ## Manual layout validation
 

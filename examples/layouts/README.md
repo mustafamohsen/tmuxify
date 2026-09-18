@@ -34,6 +34,7 @@ These are the best first layouts to copy into a project as `.tmuxify.yml`:
 | `classic-4-pane.yml` | Editor + assistant/scratch + Git + terminal | Assistant pane is intentionally manual. |
 | `fullstack-dev.yml` | Monorepo with `backend/` and `frontend/` | Runs guarded backend/frontend dev panes. |
 | `multi-window-development.yml` | Two-window development workspace | Nested panes, pane focus, and safe/manual test and log commands. Change focus to `tests` to demonstrate window focus. |
+| `named-panes.yml` | Stable labels for nested panes | Explicit opt-in; requires tmux 3.2+. Existing layouts remain unchanged. |
 
 ## Development layouts
 
