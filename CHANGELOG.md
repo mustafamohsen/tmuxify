@@ -2,14 +2,20 @@
 
 ## [Unreleased]
 
+### Breaking changes
+- `session.name` now selects a workspace within a canonical project root, not a literal server-wide tmux name. Scripts targeting old session names must use the reported concrete name instead.
+- Legacy sessions are left untouched, not automatically reused or adopted. The first new launch can start duplicate programs; preview and consider `--no-commands` during migration. Later reuse does not start commands skipped at creation.
+- Git-aware discovery can select an ancestor layout and change the working directory for subdirectory launches. All new panes start at the resolved project root; use `--root DIR` to override it.
+- Workspace names must be strings or null; non-string values and control characters are rejected. Identity paths must be valid UTF-8 without control characters.
+- See the [migration guide](doc/configuration.md#compatibility-and-migration) before upgrading.
+
 ### Added
 - Project-root discovery bounded by conventional Git worktree markers, with an authoritative `--root DIR` override and directory completion in Bash and Zsh.
 - Project-scoped default and named workspaces, deterministic readable tmux names, full session-local identity verification, and committed readiness for safe reuse.
 - Public identity, concurrency/failure, and attached-client tests; real tmux 2.1 and Bash 3.2 compatibility coverage.
 
 ### Changed
-- `session.name` now selects a workspace within a canonical project root, not a literal server-wide tmux name. Existing legacy sessions are left untouched; first migration can start duplicate programs, so preview and consider `--no-commands`.
-- All new panes start at the resolved project root. Layout templates remain independent of root selection and are snapshotted for each invocation.
+- Layout templates remain independent of root selection and are snapshotted for each invocation.
 - Reuse follows full identity through manual tmux renames and never reconciles or restarts a running workspace. Collisions, ambiguous ownership, and incomplete construction fail explicitly.
 - Preview/layout listing expose project context. Export preserves portable workspace selectors without embedding generated names or roots, while retaining its simplified geometry and active-focus contract.
 - The integration suite owns a private tmux server instead of cleaning up sessions by a shared-server name prefix.
