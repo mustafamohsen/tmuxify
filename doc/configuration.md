@@ -7,11 +7,25 @@ Tmuxify can run with an explicit layout, a project layout, a user default, or it
 When you run `tmuxify` without `--file`, layout selection is:
 
 1. `--file <path>` if supplied.
-2. `.tmuxify.yml` in the current directory.
+2. `.tmuxify.yml` at the resolved project root.
 3. `${XDG_CONFIG_HOME:-$HOME/.config}/tmuxify/layouts/default.yml`.
 4. Built-in four-pane layout.
 
 The built-in workspace uses the same preview and command controls as YAML layouts. Its editor pane starts Neovim when available; otherwise it remains a shell with an installation hint. Neovim is optional. `--dry-run` shows all built-in commands, and `--no-commands` suppresses them, including the editor.
+
+## Project root
+
+Inside a conventional Git worktree, tmuxify finds the nearest `.git` marker, then searches for the nearest `.tmuxify.yml` between your current directory and that worktree root. A nearer layout defines a nested project; without a layout, the worktree root is used. Linked worktrees and submodules stay separate. Discovery does not execute Git or follow gitfiles into shared metadata directories.
+
+Outside Git, the current directory remains the root; ancestor layouts are not searched. Use `--root DIR` to explicitly select a project, including from a non-Git subdirectory. The override is authoritative and considers only `DIR/.tmuxify.yml` before user/default layouts.
+
+`--file` selects a layout template, **not** its working directory. Relative `--file` and `--root` paths are resolved from the invocation directory, regardless of option order. Directory symlinks resolve to their physical destination. Selected unreadable or invalid configurations fail rather than silently falling back.
+
+```bash
+tmuxify --dry-run --root ../service --file ~/layouts/development.yml
+```
+
+Bare repositories and `GIT_DIR`-only setups need an explicit root when the invocation directory is not the intended project. A stale `.git` marker still bounds discovery. Adding/removing a nested `.tmuxify.yml` can change project scope; preview before running changed layouts.
 
 ## Project layout
 
@@ -80,7 +94,7 @@ The default border mode is `preserve`, which records names without replacing you
 
 ## Commands and working directory
 
-Panes are created with the directory where `tmuxify` was run as their working directory. Each `command` is sent to tmux as shell input, like typing it and pressing Enter.
+Panes are created with the resolved project root as their initial working directory. Shell startup files and configured commands may subsequently change it. The selected layout is snapshotted before validation and creation so one invocation uses one configuration. Each `command` is sent to tmux as shell input, like typing it and pressing Enter.
 
 Useful command patterns:
 

@@ -12,6 +12,8 @@ GLOBAL_COMPLETIONS_DIR="$TMUXIFY_CONFIG_DIR/completions"
 GLOBAL_DEFAULT_CONFIG_FILE="$GLOBAL_LAYOUTS_DIR/default.yml"
 
 CUSTOM_CONFIG=""
+ROOT_OVERRIDE=""
+LIST_SESSIONS=0
 EXPORT_FLAG=0
 EXPORT_FILENAME=""
 LIST_LAYOUTS=0
@@ -50,6 +52,7 @@ Options:
   -l, --list                 List active tmux sessions
       --list-layouts         List project and user layout files
   -f, --file LAYOUT_FILE     Use a specific layout file (overrides .tmuxify.yml)
+      --root DIR            Use an explicit project root
   -e, --export [FILENAME]    Export current tmux session layout to YAML
       --dry-run              Validate and preview the layout without creating tmux sessions
       --detach               Create the session without attaching or switching clients
@@ -113,10 +116,13 @@ while [ $# -gt 0 ]; do
       UPDATE_REQUESTED=1
       ;;
     --list|-l)
-      command -v tmux >/dev/null || die "tmux is required but not found. Please install it (https://github.com/tmux/tmux)."
-      echo "Active tmux sessions:"
-      tmux list-sessions || echo "No active tmux sessions found."
-      exit 0
+      LIST_SESSIONS=1
+      ;;
+    --root)
+      [ -z "$ROOT_OVERRIDE" ] || die "--root may only be supplied once."
+      [ -n "${2:-}" ] && [ "${2#-}" = "$2" ] || die "Missing directory after --root."
+      ROOT_OVERRIDE="$2"
+      shift
       ;;
     --list-layouts)
       LIST_LAYOUTS=1
@@ -165,6 +171,7 @@ print_completion_options() {
 --list|-l
 --list-layouts
 --file|-f:file
+--root:directory
 --export|-e:file
 --dry-run
 --detach
@@ -173,11 +180,68 @@ print_completion_options() {
 EOF
 }
 
+path_exists() { [ -e "$1" ] || [ -L "$1" ]; }
+
+canonical_directory() {
+  local physical
+  # The sentinel preserves trailing newlines so unsupported paths cannot alias.
+  physical=$(unset CDPATH; cd -P -- "$1" && env pwd -P && printf '.') || die "Cannot resolve project directory."
+  physical=${physical%.}
+  physical=${physical%$'\n'}
+  case "$physical" in *$'\n'*) die "Project paths must not contain control characters." ;; esac
+  if printf '%s' "$physical" | LC_ALL=C grep -q '[[:cntrl:]]'; then
+    die "Project paths must not contain control characters."
+  fi
+  printf '%s\n' "$physical"
+}
+
+resolve_project_context() {
+  local directory ceiling
+  INVOCATION_DIR=$(canonical_directory .) || exit 1
+  WORKDIR="$INVOCATION_DIR"
+  ROOT_SOURCE="invocation directory"
+  if [ -n "$ROOT_OVERRIDE" ]; then
+    WORKDIR=$(canonical_directory "$ROOT_OVERRIDE") || exit 1
+    ROOT_SOURCE="explicit --root"
+    DEFAULT_CONFIG_FILE="${WORKDIR%/}/.tmuxify.yml"
+    return
+  fi
+  directory="$INVOCATION_DIR"
+  ceiling=""
+  while :; do
+    [ -r "$directory" ] && [ -x "$directory" ] || die "Cannot inspect project ancestors; use --root."
+    if path_exists "$directory/.git"; then
+      [ -d "$directory/.git" ] || [ -f "$directory/.git" ] || [ -L "$directory/.git" ] ||
+        die "Unsupported .git marker; use --root to select a project explicitly."
+      ceiling="$directory"
+      break
+    fi
+    [ "$directory" != / ] || break
+    directory=${directory%/*}; directory=${directory:-/}
+  done
+  if [ -n "$ceiling" ]; then
+    WORKDIR="$ceiling"
+    ROOT_SOURCE="worktree root"
+    directory="$INVOCATION_DIR"
+    while :; do
+      if path_exists "$directory/.tmuxify.yml"; then
+        WORKDIR="$directory"
+        ROOT_SOURCE="project layout within worktree"
+        break
+      fi
+      [ "$directory" != "$ceiling" ] || break
+      directory=${directory%/*}; directory=${directory:-/}
+    done
+  fi
+  DEFAULT_CONFIG_FILE="${WORKDIR%/}/.tmuxify.yml"
+}
+
 list_layouts() {
   local project_layout found
-  project_layout="$(pwd)/.tmuxify.yml"
+  project_layout="$DEFAULT_CONFIG_FILE"
   found=0
 
+  printf 'Project root: %s\n' "$WORKDIR"
   printf 'Available tmuxify layouts:\n'
   if [ -f "$project_layout" ]; then
     printf '  project     %s\n' "$project_layout"
@@ -339,6 +403,17 @@ safe_update() {
   die "Failed to replace installed script."
 }
 
+if [ -n "$ROOT_OVERRIDE" ] && { [ "${UPDATE_REQUESTED:-0}" -eq 1 ] || [ "$LIST_SESSIONS" -eq 1 ] || [ "$EXPORT_FLAG" -eq 1 ] || [ "$COMPLETION_OPTIONS" -eq 1 ]; }; then
+  die "--root only applies to workspace launch, --dry-run, and --list-layouts."
+fi
+
+if [ "$LIST_SESSIONS" -eq 1 ]; then
+  command -v tmux >/dev/null || die "tmux is required but not found."
+  echo "Active tmux sessions:"
+  tmux list-sessions || echo "No active tmux sessions found."
+  exit 0
+fi
+
 if [ "${UPDATE_REQUESTED:-0}" -eq 1 ]; then
   safe_update
 fi
@@ -349,6 +424,7 @@ if [ "${COMPLETION_OPTIONS:-0}" -eq 1 ]; then
 fi
 
 if [ "$LIST_LAYOUTS" -eq 1 ]; then
+  resolve_project_context
   list_layouts
   exit 0
 fi
@@ -364,25 +440,29 @@ if [ "$DRY_RUN" -eq 0 ]; then
   command -v tmux >/dev/null || die "tmux is required but not found. Please install it (https://github.com/tmux/tmux)."
 fi
 
-WORKDIR=$(pwd)
-DEFAULT_CONFIG_FILE="$WORKDIR/.tmuxify.yml"
-
-if [ -n "$CUSTOM_CONFIG" ]; then
-  if [ ! -f "$CUSTOM_CONFIG" ] || [ ! -r "$CUSTOM_CONFIG" ]; then
-    die "Specified layout file '$CUSTOM_CONFIG' does not exist or is not readable"
+select_configuration() {
+  resolve_project_context
+  CONFIG_SOURCE="built-in default"
+  CONFIG_FILE=""
+  if [ -n "$CUSTOM_CONFIG" ]; then
+    case "$CUSTOM_CONFIG" in
+      /*) CONFIG_SOURCE="$CUSTOM_CONFIG" ;;
+      *) CONFIG_SOURCE="$INVOCATION_DIR/$CUSTOM_CONFIG" ;;
+    esac
+    info "Using custom layout file: $CONFIG_SOURCE"
+  elif path_exists "$DEFAULT_CONFIG_FILE"; then
+    CONFIG_SOURCE="$DEFAULT_CONFIG_FILE"
+  elif path_exists "$GLOBAL_DEFAULT_CONFIG_FILE"; then
+    CONFIG_SOURCE="$GLOBAL_DEFAULT_CONFIG_FILE"
+    info "Using global default layout file: $CONFIG_SOURCE"
+  else
+    return
   fi
-  CONFIG_FILE="$CUSTOM_CONFIG"
-  info "Using custom layout file: $CONFIG_FILE"
-elif [ -e "$DEFAULT_CONFIG_FILE" ]; then
-  [ -r "$DEFAULT_CONFIG_FILE" ] || die "Cannot read config file: $DEFAULT_CONFIG_FILE"
-  CONFIG_FILE="$DEFAULT_CONFIG_FILE"
-elif [ -e "$GLOBAL_DEFAULT_CONFIG_FILE" ]; then
-  [ -r "$GLOBAL_DEFAULT_CONFIG_FILE" ] || die "Cannot read config file: $GLOBAL_DEFAULT_CONFIG_FILE"
-  CONFIG_FILE="$GLOBAL_DEFAULT_CONFIG_FILE"
-  info "Using global default layout file: $CONFIG_FILE"
-else
-  CONFIG_FILE="$DEFAULT_CONFIG_FILE"
-fi
+  [ -f "$CONFIG_SOURCE" ] && [ -r "$CONFIG_SOURCE" ] || die "Cannot read layout file: $CONFIG_SOURCE"
+  init_tmp_dir
+  CONFIG_FILE="$TMP_DIR/layout.yml"
+  cp -- "$CONFIG_SOURCE" "$CONFIG_FILE" || die "Failed to snapshot layout: $CONFIG_SOURCE"
+}
 
 sanitize_name() {
   printf '%s' "$1" | sed 's/\./_/g; s/[^a-zA-Z0-9_-][^a-zA-Z0-9_-]*/_/g; s/^_//; s/_$//'
@@ -705,6 +785,8 @@ if [ "$EXPORT_FLAG" -eq 1 ]; then
   export_session
 fi
 
+select_configuration
+
 # Use the same preview, construction, and command controls for the built-in layout.
 if [ ! -f "$CONFIG_FILE" ]; then
   init_tmp_dir
@@ -766,6 +848,7 @@ fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
   success "Configuration is valid."
+  printf 'Project root: %s\nRoot source: %s\nLayout source: %s\n' "$WORKDIR" "$ROOT_SOURCE" "$CONFIG_SOURCE"
   printf 'Session: %s\n' "$session_name"
   if [ "$PANE_NAMES_ENABLED" -eq 1 ]; then
     printf 'Pane names: enabled (border: %s; requires tmux 3.2+)\n' "$PANE_NAMES_BORDER"
@@ -899,7 +982,7 @@ dispatch_configured_commands() {
   local pane_target item_path pane_command
   [ "$RUN_COMMANDS" -eq 0 ] && return 0
   [ ! -s "$TMP_DIR/configured_commands" ] && return 0
-  info "Running commands from $CONFIG_FILE. Use --dry-run to preview or --no-commands to create panes only."
+  info "Running commands from $CONFIG_SOURCE. Use --dry-run to preview or --no-commands to create panes only."
   while IFS=$'\t' read -r pane_target item_path; do
     pane_command=$(yq -r "$item_path.command" "$CONFIG_FILE")
     tmux_or_die tmux send-keys -t "$pane_target" "$pane_command" C-m
@@ -978,7 +1061,7 @@ else
 fi
 SESSION_CREATING=0
 [ "$INTERRUPTED_STATUS" -eq 0 ] || exit "$INTERRUPTED_STATUS"
-info "Building layout from $CONFIG_FILE..."
+info "Building layout from $CONFIG_SOURCE..."
 tmux_or_die tmux set-window-option -t "$CREATED_SESSION_ID:" aggressive-resize on
 root_pane=$(tmux display-message -t "$CREATED_SESSION_ID:" -p '#{pane_id}') || die "Failed to identify initial pane."
 first_pane="$root_pane"

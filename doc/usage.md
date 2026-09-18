@@ -2,7 +2,7 @@
 
 ## Common workflows
 
-Create or attach to the workspace for the current directory:
+Create or attach to the workspace for the resolved project:
 
 ```bash
 tmuxify
@@ -43,6 +43,7 @@ tmux attach -t <session-name>
 | `--list` | `-l` | List active tmux sessions. |
 | `--list-layouts` | | List project and user layout files. |
 | `--file FILE` | `-f` | Use a specific YAML layout. |
+| `--root DIR` | | Override the project root (directory, not layout location). |
 | `--export [FILE]` | `-e` | Export the current tmux session to a simplified YAML template. |
 | `--dry-run` | | Validate and preview the selected layout only. |
 | `--detach` | | Create the session without attaching or switching to it. |
@@ -54,9 +55,11 @@ tmux attach -t <session-name>
 When no `--file` is provided, tmuxify chooses a layout in this order:
 
 1. `--file <path>` if provided.
-2. `.tmuxify.yml` in the current directory.
+2. `.tmuxify.yml` at the resolved project root.
 3. `${XDG_CONFIG_HOME:-$HOME/.config}/tmuxify/layouts/default.yml`.
 4. Built-in four-pane default layout.
+
+Within a Git worktree, the nearest project layout defines the root; without one, the worktree root is used. Outside Git, use the current directory or explicitly select `--root DIR`. See [root discovery](configuration.md#project-root). `--file` paths remain relative to the invocation directory. `--root` supports launch, preview, and layout listing, not update/export/active-session listing/completion metadata.
 
 ## Safe workflow
 

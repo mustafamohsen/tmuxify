@@ -19,6 +19,8 @@ _tmuxify() {
     for opt in "${(@s:|:)aliases}"; do
       if [[ $kind == file ]]; then
         specs+=("${opt}[${desc}]:layout file:_files")
+      elif [[ $kind == directory ]]; then
+        specs+=("${opt}[${desc}]:project root:_files -/")
       else
         specs+=("${opt}[${desc}]")
       fi
