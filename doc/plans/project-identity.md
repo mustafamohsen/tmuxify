@@ -542,4 +542,8 @@ The user-approved baseline was `a165c8f`; independent, fresh-context Standards a
 - **Spec:** three findings were reproduced through the public CLI and corrected test-first: discovered roots ending in semicolons (`5f765c7`), readiness values with trailing newlines (`fc7be8b`), and export with explicitly empty identity metadata (`ef88c82`). Each regression failed before its fix and passed afterward, including on tmux 2.1.
 - The retained Spec reviewer checked the corrective diff through `ef88c82`, confirmed all three findings resolved, and found no new defect within that change scope. The final full-suite and baseline runs above completed after the fixes.
 
-Review workflow: `a7b4c693-1b1f-4d76-a3df-ac11d0e552be`; Spec follow-up: `552ae501-5610-4746-a04c-9ed965b6121a`. Runtime remains 2.7.1; no remote publication or release was performed.
+Review workflow: `a7b4c693-1b1f-4d76-a3df-ac11d0e552be`; Spec follow-up: `552ae501-5610-4746-a04c-9ed965b6121a`. Runtime remains 2.7.1; no release was performed. The owner subsequently authorized branch publication and PR creation.
+
+### PR validation follow-up
+
+[PR #24](https://github.com/mustafamohsen/tmuxify/pull/24) explicitly marks this as a breaking change. The first Linux CI job stopped at ShellCheck SC2015 warnings for five boolean guard expressions. Those guards were rewritten as equivalent explicit conditionals, without suppressing checks. Local syntax, ShellCheck, and all 28 integration groups passed again after that correction; the new remote CI run remains a separate gate.

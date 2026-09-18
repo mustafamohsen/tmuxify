@@ -127,7 +127,9 @@ while [ $# -gt 0 ]; do
       ;;
     --root)
       [ -z "$ROOT_OVERRIDE" ] || die "--root may only be supplied once."
-      [ -n "${2:-}" ] && [ "${2#-}" = "$2" ] || die "Missing directory after --root."
+      if [ -z "${2:-}" ] || [ "${2#-}" != "$2" ]; then
+        die "Missing directory after --root."
+      fi
       ROOT_OVERRIDE="$2"
       shift
       ;;
@@ -216,7 +218,9 @@ resolve_project_context() {
   directory="$INVOCATION_DIR"
   ceiling=""
   while :; do
-    [ -r "$directory" ] && [ -x "$directory" ] || die "Cannot inspect project ancestors; use --root."
+    if [ ! -r "$directory" ] || [ ! -x "$directory" ]; then
+      die "Cannot inspect project ancestors; use --root."
+    fi
     if path_exists "$directory/.git"; then
       [ -d "$directory/.git" ] || [ -f "$directory/.git" ] || [ -L "$directory/.git" ] ||
         die "Unsupported .git marker; use --root to select a project explicitly."
@@ -465,7 +469,9 @@ select_configuration() {
   else
     return
   fi
-  [ -f "$CONFIG_SOURCE" ] && [ -r "$CONFIG_SOURCE" ] || die "Cannot read layout file: $CONFIG_SOURCE"
+  if [ ! -f "$CONFIG_SOURCE" ] || [ ! -r "$CONFIG_SOURCE" ]; then
+    die "Cannot read layout file: $CONFIG_SOURCE"
+  fi
   init_tmp_dir
   CONFIG_FILE="$TMP_DIR/layout.yml"
   cp -- "$CONFIG_SOURCE" "$CONFIG_FILE" || die "Failed to snapshot layout: $CONFIG_SOURCE"
@@ -832,7 +838,9 @@ export_session() {
 
   current_session=$(tmux display-message -p "${export_target[@]}" '#{session_name}') || die "Failed to read current tmux session."
   current_id=$(tmux display-message -p "${export_target[@]}" '#{session_id}') || die "Failed to identify current tmux session."
-  [ -n "$current_session" ] && [ -n "$current_id" ] || die "Current tmux session disappeared."
+  if [ -z "$current_session" ] || [ -z "$current_id" ]; then
+    die "Current tmux session disappeared."
+  fi
   # Without -v, an explicitly empty local option still includes its name.
   # Absence permits legacy export; presence always requires a valid identity.
   identity_option=$(tmux show-options -q -t "$current_id" @tmuxify_workspace_identity) || die "Failed to read workspace metadata for $current_id."
@@ -1196,8 +1204,10 @@ SESSION_CREATING=0
 [ "$INTERRUPTED_STATUS" -eq 0 ] || exit "$INTERRUPTED_STATUS"
 tmux_or_die tmux set-option -t "$CREATED_SESSION_ID" @tmuxify_workspace_identity "$WORKSPACE_IDENTITY"
 tmux_or_die tmux set-option -t "$CREATED_SESSION_ID" @tmuxify_workspace_state building
-[ "$(session_option "$CREATED_SESSION_ID" @tmuxify_workspace_identity)" = "$WORKSPACE_IDENTITY" ] &&
-  [ "$(session_option "$CREATED_SESSION_ID" @tmuxify_workspace_state && printf '.')" = $'building\n.' ] || die "Failed to verify new workspace metadata."
+if [ "$(session_option "$CREATED_SESSION_ID" @tmuxify_workspace_identity)" != "$WORKSPACE_IDENTITY" ] ||
+  [ "$(session_option "$CREATED_SESSION_ID" @tmuxify_workspace_state && printf '.')" != $'building\n.' ]; then
+  die "Failed to verify new workspace metadata."
+fi
 info "Building layout from $CONFIG_SOURCE..."
 tmux_or_die tmux set-window-option -t "$CREATED_SESSION_ID:" aggressive-resize on
 root_pane=$(tmux display-message -t "$CREATED_SESSION_ID:" -p '#{pane_id}') || die "Failed to identify initial pane."
